@@ -12,7 +12,7 @@ from typing import List
 K = 5000
 X = 30
 MAX_TOKENS_CHARS = 5
-MAX_DOCS = 1000
+MAX_DOCS = 200000
 
 nlp = spacy.load('en_core_web_sm')
 
