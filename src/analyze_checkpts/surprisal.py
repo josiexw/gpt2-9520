@@ -88,11 +88,12 @@ def main():
     parser.add_argument('--model_name', type=str, default='gpt2-small', help='Name of pretrained GPT-2 model to use.')
     parser.add_argument('--output_path', type=str, required=True, help='Path to save surprisal dict as JSON.')
     parser.add_argument('--contexts_json', type=str, required=True, help='Path to contexts JSON.')
+    parser.add_argument('--batch_size', type=int, default=8, help='Batch size for GPT-2 processing.')
     args = parser.parse_args()
 
     with open(args.contexts_json, 'r') as f:
         contexts = json.load(f)
-    experiment = Experiment(model_name=args.model_name, output_path=args.output_path)
+    experiment = Experiment(model_name=args.model_name, output_path=args.output_path, batch_size=args.batch_size)
     surprisal_dict = experiment.compute_surprisal_dict(contexts)
 
     with open(args.output_path, 'w') as f:
