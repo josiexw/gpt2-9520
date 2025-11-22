@@ -1,6 +1,5 @@
 import argparse
-import json
-import random
+import pickle
 import re
 import spacy
 
@@ -80,15 +79,15 @@ def main():
     parser.add_argument('--X', type=int, default=X, help='Number of contexts to consider per simple word.')
     parser.add_argument('--max_tokens_chars', type=int, default=MAX_TOKENS_CHARS, help='Maximum character length of a simple word.')
     parser.add_argument('--max_docs', type=int, default=MAX_DOCS, help='Maximum number of documents to scan.')
-    parser.add_argument('--output_path', type=str, required=True, help='Path to save the collected contexts as a JSON file.')
+    parser.add_argument('--output_path', type=str, required=True, help='Path to save the collected contexts as a pickle file.')
     args = parser.parse_args()
 
     word_counter = get_word_frequencies(max_docs=args.max_docs)
     simple_words = find_simple_words(word_counter, k=args.K, max_length=args.max_tokens_chars)
     contexts = collect_contexts(simple_words, max_context=args.X, max_docs=args.max_docs)
 
-    with open(args.output_path, 'w') as f:
-        json.dump(contexts, f)
+    with open(args.output_path, 'wb') as f:
+        pickle.dump(contexts, f)
 
 if __name__ == '__main__':
     main()
