@@ -36,18 +36,9 @@ class Experiment:
         prefixes, full_texts = batch["prefixes"], batch["full_texts"]
         batch_size = len(prefixes)
 
-        prefix_lens = [
-            len(self.model.to_tokens(prefix, prepend_bos=False)[0])
-            for prefix in prefixes
-        ]
-        full_lens = [
-            len(self.model.to_tokens(full_text, prepend_bos=False)[0])
-            for full_text in full_texts
-        ]
-        num_word_tokens = [
-            full_len - pref_len
-            for pref_len, full_len in zip(prefix_lens, full_lens)
-        ]
+        prefix_lens = [len(self.model.to_tokens(prefix, prepend_bos=False)[0]) for prefix in prefixes]
+        full_lens = [len(self.model.to_tokens(full_text, prepend_bos=False)[0]) for full_text in full_texts]
+        num_word_tokens = [full_len - pref_len for pref_len, full_len in zip(prefix_lens, full_lens)]
 
         full_tokens = self.model.to_tokens(full_texts, prepend_bos=False)
 
@@ -110,10 +101,7 @@ class Experiment:
             layer_attn_vals = torch.cat(layer_attn_vals, dim=0)
 
             avg = sum(surprisals) / len(surprisals)
-            per_token_vals = [
-                s / t if t > 0 else float("nan")
-                for s, t in zip(surprisals, token_counts)
-            ]
+            per_token_vals = [s / t if t > 0 else float("nan") for s, t in zip(surprisals, token_counts)]
             per_token_vals = [x for x in per_token_vals if not math.isnan(x)]
             if len(per_token_vals) > 0:
                 avg_per_token = sum(per_token_vals) / len(per_token_vals)
@@ -149,10 +137,9 @@ def main():
     parser.add_argument("--contexts_pkl", type=str, required=True)
     parser.add_argument("--out_dir", type=str, required=True)
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--dtype", type=str, default="float16",
-                        choices=["float32", "float16", "bfloat16"])
+    parser.add_argument("--dtype", type=str, default="float16", choices=["float32", "float16", "bfloat16"])
     parser.add_argument("--device", type=str, default=None)
-    parser.add_argument("--checkpoint_stride", type=int, default=6)
+    parser.add_argument("--checkpoint_stride", type=int, default=12)
     parser.add_argument("--checkpoint_start", type=int, default=0)
     parser.add_argument("--checkpoint_end", type=int, default=None)
     args = parser.parse_args()
@@ -175,82 +162,73 @@ def main():
 
     labels, label_type = get_checkpoint_labels(base_model_name)
     num_ckpts = len(labels)
-    start = max(args.checkpoint_start, 0)
     end = num_ckpts if args.checkpoint_end is None else min(args.checkpoint_end, num_ckpts)
 
-    success_log_path = os.path.join(args.out_dir, "checkpoint_success.txt")
-    failed_log_path = os.path.join(args.out_dir, "checkpoint_failed.txt")
+    print(f"Model: {base_model_name}")
+    print(f"Checkpoint label type: {label_type}")
+    print(f"Total checkpoints in table: {num_ckpts}")
+    print(f"Using stride {args.checkpoint_stride}")
 
     with open(args.contexts_pkl, "rb") as f:
         contexts = pickle.load(f)
 
-    with open(success_log_path, "w") as f_success, open(failed_log_path, "w") as f_failed:
-        f_success.write("idx,label_type,label,output_pkl\n")
-        f_failed.write("idx,label_type,label,reason\n")
+    for idx in range(0, end, args.checkpoint_stride):
+        label = labels[idx]
+        out_pkl = os.path.join(
+            args.out_dir,
+            f"results_ckpt_idx{idx:04d}_{label_type}{label}.pkl",
+        )
 
-        for idx in range(start, end, args.checkpoint_stride):
-            label = labels[idx]
-            out_pkl = os.path.join(
-                args.out_dir,
-                f"results_ckpt_idx{idx:04d}_{label_type}{label}.pkl",
+        if os.path.exists(out_pkl):
+            print(f"[{idx}] Skipping (results already exist): {out_pkl}")
+            continue
+
+        print(f"[{idx}] Loading model {base_model_name} checkpoint_index={idx} (label={label_type} {label})")
+
+        try:
+            model = HookedTransformer.from_pretrained_no_processing(
+                base_model_name,
+                checkpoint_index=idx,
+                device=device,
+                dtype=torch_dtype,
             )
-
-            if os.path.exists(out_pkl):
-                print(f"[{idx}] Skipping (results already exist): {out_pkl}")
-                f_success.write(f"{idx},{label_type},{label},{out_pkl}\n")
+        except RevisionNotFoundError as e:
+            print(f"[{idx}] SKIP: Revision not found on Hugging Face: {e}")
+            continue
+        except OSError as e:
+            msg = str(e)
+            if "not a valid git identifier" in msg:
+                print(f"[{idx}] SKIP: Invalid git revision for this checkpoint: {msg}")
                 continue
-
-            print(f"[{idx}] Loading model {base_model_name} checkpoint_index={idx} (label={label_type} {label})")
-
-            try:
-                model = HookedTransformer.from_pretrained_no_processing(
-                    base_model_name,
-                    checkpoint_index=idx,
-                    device=device,
-                    dtype=torch_dtype,
-                )
-            except RevisionNotFoundError as e:
-                print(f"[{idx}] SKIP: Revision not found on Hugging Face: {e}")
-                f_failed.write(f"{idx},{label_type},{label},RevisionNotFoundError\n")
+            else:
+                print(f"[{idx}] ERROR: OSError when loading checkpoint: {msg}")
                 continue
-            except OSError as e:
-                msg = str(e)
-                if "not a valid git identifier" in msg:
-                    print(f"[{idx}] SKIP: Invalid git revision for this checkpoint: {msg}")
-                    f_failed.write(f"{idx},{label_type},{label},InvalidRevision\n")
-                    continue
-                else:
-                    print(f"[{idx}] ERROR: OSError when loading checkpoint: {msg}")
-                    f_failed.write(f"{idx},{label_type},{label},OSError\n")
-                    continue
-            except Exception as e:
-                print(f"[{idx}] ERROR: Unexpected exception: {e}")
-                f_failed.write(f"{idx},{label_type},{label},{type(e).__name__}\n")
-                continue
+        except Exception as e:
+            print(f"[{idx}] ERROR: Unexpected exception: {e}")
+            continue
 
-            experiment = Experiment(model=model, batch_size=args.batch_size)
-            output_dict = experiment.compute_output_dict(contexts)
+        experiment = Experiment(model=model, batch_size=args.batch_size)
+        output_dict = experiment.compute_output_dict(contexts)
 
-            with open(out_pkl, "wb") as f_out:
-                pickle.dump(output_dict, f_out)
+        with open(out_pkl, "wb") as f_out:
+            pickle.dump(output_dict, f_out)
 
-            del model
-            if device.startswith("cuda"):
-                torch.cuda.empty_cache()
+        del model
+        if device.startswith("cuda"):
+            torch.cuda.empty_cache()
 
-            f_success.write(f"{idx},{label_type},{label},{out_pkl}\n")
-            print(f"[{idx}] Saved results to: {out_pkl}")
+        print(f"[{idx}] Saved results to: {out_pkl}")
 
     print("Done.")
-
 
 if __name__ == "__main__":
     main()
 
 # python src/analyze_checkpts/mult_ckpt.py \
 #   --model_size small \
-#   --contexts_pkl contexts.pkl \
+#   --contexts_pkl data/contexts_cosmopedia.pkl \
 #   --out_dir stanford-gpt2-small-a_results \
 #   --batch_size 8 \
 #   --checkpoint_stride 12 \
 #   --dtype float16
+#   --device mps
