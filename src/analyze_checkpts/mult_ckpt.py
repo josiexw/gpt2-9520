@@ -231,3 +231,4 @@ if __name__ == "__main__":
 #   --batch_size 8 \
 #   --checkpoint_stride 12 \
 #   --dtype float16
+#   --device mps

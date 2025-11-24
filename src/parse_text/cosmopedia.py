@@ -79,9 +79,9 @@ def is_single_bpe_token(word):
     return len(ids) == 1
 
 
-def find_simple_words(word_counter: Counter, k: int = K):
+def find_simple_words(word_counter: Counter, k: int = K, char_limit: int = 5):
     frequent_words = word_counter.most_common(k)
-    simple_words = [word for word, _ in frequent_words if is_single_bpe_token(word)]
+    simple_words = [word for word, _ in frequent_words if len(word) <= char_limit and is_single_bpe_token(word)]
     return set(simple_words)
 
 
@@ -127,6 +127,7 @@ def main():
     parser.add_argument("--K", type=int, default=K, help="Number of most frequent words to consider.")
     parser.add_argument("--X", type=int, default=X, help="Number of contexts to collect per simple word.")
     parser.add_argument("--token_limit", type=int, default=TOKEN_LIMIT, help="Approximate total number of word tokens to sample from Cosmopedia.")
+    parser.add_argument("--char_limit", type=int, default=5, help="Maximum character length for a word to be considered simple.",)
     parser.add_argument("--subsets", type=str, default=",".join(COSMOPEDIA_SUBSETS), help="Comma-separated list of Cosmopedia subsets to sample from.")
     parser.add_argument("--output_path", type=str, required=True, help="Path to save the collected contexts as a pickle file.")
     args = parser.parse_args()
@@ -139,7 +140,7 @@ def main():
     )
 
     word_counter = get_word_frequencies_from_texts(texts)
-    simple_words = find_simple_words(word_counter, k=args.K)
+    simple_words = find_simple_words(word_counter, k=args.K, char_limit=args.char_limit)
     print(f"Found {len(simple_words)} simple words.")
 
     contexts = collect_contexts_from_texts(texts, simple_words, max_context=args.X,)
