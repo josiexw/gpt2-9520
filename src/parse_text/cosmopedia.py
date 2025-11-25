@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 
 X = 128
-TOKEN_LIMIT = 100_000_000
+TOKEN_LIMIT = 500_000_000
 
 COSMOPEDIA_SUBSETS = [
     "auto_math_text",
