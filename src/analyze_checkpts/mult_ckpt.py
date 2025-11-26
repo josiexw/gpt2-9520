@@ -228,7 +228,6 @@ if __name__ == "__main__":
 #   --model_size small \
 #   --contexts_pkl data/contexts_cosmopedia.pkl \
 #   --out_dir stanford-gpt2-small-a_results \
-#   --batch_size 8 \
+#   --batch_size 256 \
 #   --checkpoint_stride 12 \
 #   --dtype float16
-#   --device mps
