@@ -34,7 +34,12 @@ def main():
 
     start = max(args.start, 0)
     end = num_ckpts if args.end is None else min(args.end, num_ckpts)
-    print(f"Attempting checkpoints indices [{start}, {end}) with stride {args.stride}")
+    if start >= end:
+        raise ValueError(f"Invalid range: start={start}, end={end}")
+
+    target_successes = (end - start + args.stride - 1) // args.stride
+    print(f"Attempting checkpoints indices in [{start}, {end}) with stride {args.stride}")
+    print(f"Target successful checkpoints: {target_successes}")
 
     success_log_path = os.path.join(args.out_dir, "checkpoint_success.txt")
     failed_log_path = os.path.join(args.out_dir, "checkpoint_failed.txt")
@@ -46,7 +51,10 @@ def main():
         f_success.write("idx,label_type,label,filename\n")
         f_failed.write("idx,label_type,label,reason\n")
 
-        for idx in range(start, end, args.stride):
+        idx = start
+        num_success = 0
+
+        while idx < end and num_success < target_successes:
             label = labels[idx]
             fname = f"ckpt_idx{idx:04d}_{label_type}{label}.pt"
             out_path = os.path.join(args.out_dir, fname)
@@ -55,6 +63,8 @@ def main():
                 print(f"[{idx}] Skipping (already exists): {out_path}")
                 successful.append((idx, label))
                 f_success.write(f"{idx},{label_type},{label},{fname}\n")
+                num_success += 1
+                idx += args.stride
                 continue
 
             print(f"[{idx}] Loading checkpoint (label={label_type} {label})...")
@@ -70,6 +80,7 @@ def main():
                 print(f"[{idx}] SKIP: Revision not found on Hugging Face: {e}")
                 failed.append((idx, label, "RevisionNotFoundError"))
                 f_failed.write(f"{idx},{label_type},{label},RevisionNotFoundError\n")
+                idx += 1
                 continue
             except OSError as e:
                 msg = str(e)
@@ -77,16 +88,19 @@ def main():
                     print(f"[{idx}] SKIP: Invalid git revision for this checkpoint: {msg}")
                     failed.append((idx, label, "InvalidRevision"))
                     f_failed.write(f"{idx},{label_type},{label},InvalidRevision\n")
+                    idx += 1
                     continue
                 else:
                     print(f"[{idx}] ERROR: OSError when loading checkpoint: {msg}")
                     failed.append((idx, label, "OSError"))
                     f_failed.write(f"{idx},{label_type},{label},OSError\n")
+                    idx += 1
                     continue
             except Exception as e:
                 print(f"[{idx}] ERROR: Unexpected exception: {e}")
                 failed.append((idx, label, type(e).__name__))
                 f_failed.write(f"{idx},{label_type},{label},{type(e).__name__}\n")
+                idx += 1
                 continue
 
             print(f"[{idx}] Saving state dict to: {out_path}")
@@ -98,9 +112,12 @@ def main():
 
             successful.append((idx, label))
             f_success.write(f"{idx},{label_type},{label},{fname}\n")
+            num_success += 1
+            idx += args.stride
 
     print("\nSummary")
-    print(f"  Successful checkpoints: {len(successful)}")
+    print(f"  Target successful checkpoints: {target_successes}")
+    print(f"  Actual successful checkpoints: {len(successful)}")
     print(f"  Failed / skipped checkpoints: {len(failed)}")
     print(f"  Success log: {success_log_path}")
     print(f"  Failed log: {failed_log_path}")
