@@ -244,9 +244,9 @@ def main():
             plt.plot(steps_small, avg_small, label="gpt2-small")
             plt.plot(steps_medium, avg_medium, label="gpt2-medium")
             if not math.isnan(small_mean):
-                plt.axhline(small_mean, linestyle="--", linewidth=1, label="AoA threshold small (mean)")
+                plt.axhline(small_mean, linestyle="--", linewidth=1, color="cornflowerblue", label="AoA threshold small (mean)")
             if not math.isnan(med_mean):
-                plt.axhline(med_mean, linestyle="--", linewidth=1, label="AoA threshold medium (mean)")
+                plt.axhline(med_mean, linestyle="--", linewidth=1, color="orange", label="AoA threshold medium (mean)")
             plt.xlabel(f"{label_type_small or 'step'}")
             plt.ylabel("Average surprisal (bits)")
             plt.title(f"Top {k} simple words: surprisal vs {label_type_small or 'step'}")
@@ -268,8 +268,8 @@ def main():
             avg_medium_act = compute_avg_series(medium_act, words_k)
 
             fig = plt.figure()
-            plt.plot(steps_small, avg_small_act, label="small")
-            plt.plot(steps_medium, avg_medium_act, label="medium")
+            plt.plot(steps_small, avg_small_act, label="gpt2-small")
+            plt.plot(steps_medium, avg_medium_act, label="gpt2-medium")
             plt.xlabel(f"{label_type_small or 'step'}")
             plt.ylabel("Average activation (mean layer attention)")
             plt.title(f"Top {k} simple words: activation vs {label_type_small or 'step'}")
@@ -291,8 +291,8 @@ def main():
             y_medium = np.array([aoa_medium[w] for w in common_for_aoa])
 
             fig2 = plt.figure()
-            plt.plot(ranks, y_small, label="gpt2-small")
-            plt.plot(ranks, y_medium, label="gpt2-medium")
+            plt.plot(ranks, y_small, label="small")
+            plt.plot(ranks, y_medium, label="medium")
             plt.xlabel("Word rank by simplicity (Wordbank AoA, lower = earlier)")
             plt.ylabel("Neural AoA (normalized training step)")
             plt.title("Neural AoA vs simplicity rank")
@@ -334,8 +334,8 @@ def main():
             acts_medium_arr = np.array(acts_medium, dtype=float)
 
             fig3 = plt.figure()
-            plt.plot(ranks_arr, acts_small_arr, label=f"gpt2-small (step {actual_s})")
-            plt.plot(ranks_arr, acts_medium_arr, label=f"gpt2-medium (step {actual_m})")
+            plt.plot(ranks_arr, acts_small_arr, label=f"small (step {actual_s})")
+            plt.plot(ranks_arr, acts_medium_arr, label=f"medium (step {actual_m})")
             plt.xlabel("Word rank by simplicity")
             plt.ylabel("Activation (mean layer attention)")
             plt.title(f"Rank vs activation at target step≈{target}")
