@@ -23,11 +23,19 @@ k=500, n_words=474 activation plots saved.
 Neural AoA vs simplicity rank:
 Neural AoA points used: 444
 
-Rank vs activation at selected steps:
-  target_step=200: small_step=200, medium_step=200, n_words=474
-  target_step=20000: small_step=20000, medium_step=20000, n_words=474
-  target_step=200000: small_step=200000, medium_step=200000, n_words=474
-  target_step=392000: small_step=392000, medium_step=392000, n_words=474
+Human AoA vs Neural AoA scatter:
+  n_words=444, corr_small=0.0002, corr_medium=0.0359
 
-OWT frequency overlap (top 500 words):
-  simple_words_used=474, frequent_top_k=500, overlap=50, percent=10.55
+Surprisal trajectories stratified by human AoA bins:
+  bin early (16-20): n_words=34
+  bin mid (21-24): n_words=148
+  bin late (25-30): n_words=292
+
+Surprisal vs OWT frequency (early vs late):
+  Words with OWT frequency among used: 50
+  corr_small_early=0.1453, corr_small_late=-0.6139
+  corr_medium_early=-0.2578, corr_medium_late=-0.6229
+
+Surprisal–activation coupling (early vs late):
+  small_early_corr=-0.1147, small_late_corr=-0.0249
+  medium_early_corr=-0.1146, medium_late_corr=-0.1772
