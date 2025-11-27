@@ -4,7 +4,6 @@ import argparse
 import math
 import pickle
 from typing import Dict, List, Tuple, Set
-from collections import Counter
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -33,23 +32,25 @@ def load_wordbank_aoa(csv_path: str) -> Dict[str, float]:
     return word_to_aoa
 
 
-def load_owt_frequent_set(path: str, top_k: int) -> Set[str]:
-    words = []
+def load_owt_counts(path: str) -> Dict[str, int]:
+    counts = {}
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             parts = line.split()
-            if not parts:
+            if len(parts) < 2:
                 continue
             w = parts[0].lower()
             w = re.sub(r"\s*\([^)]*\)", "", w).strip()
+            try:
+                c = int(parts[1])
+            except ValueError:
+                continue
             if w:
-                words.append(w)
-            if len(words) >= top_k:
-                break
-    return set(words)
+                counts[w] = c
+    return counts
 
 
 def parse_step_from_fname(fname: str) -> Tuple[int, int, str]:
@@ -176,7 +177,6 @@ def main():
     parser.add_argument("--medium_dir", type=str, default="stanford-gpt2-medium-a_results")
     parser.add_argument("--wordbank_csv", type=str, default="data/wordbank_item_data.csv")
     parser.add_argument("--owt_words_txt", type=str, default="data/owt_frequent.txt")
-    parser.add_argument("--owt_top_k", type=int, default=500)
     parser.add_argument("--out_dir", type=str, default="figs")
     parser.add_argument("--out_txt", type=str, default="aoa_results.txt")
     parser.add_argument("--max_simple", type=int, default=500)
@@ -188,6 +188,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     word_aoa = load_wordbank_aoa(args.wordbank_csv)
+    owt_counts = load_owt_counts(args.owt_words_txt)
 
     steps_small, small_surpr, small_act, label_type_small = load_results_dir(args.small_dir)
     steps_medium, medium_surpr, medium_act, label_type_medium = load_results_dir(args.medium_dir)
@@ -290,59 +291,213 @@ def main():
         else:
             fout.write("No overlapping words for neural AoA curves.\n")
 
-        fout.write("\nRank vs activation at selected steps:\n")
-        for target in activation_steps:
-            idx_s, actual_s = find_nearest_step_index(steps_small, target)
-            idx_m, actual_m = find_nearest_step_index(steps_medium, target)
-            if idx_s < 0 or idx_m < 0:
-                fout.write(f"  target_step={target}: no valid checkpoints in one of the models.\n")
-                continue
-
-            acts_small = []
-            acts_medium = []
-            ranks = []
-            for r, w in enumerate(simple_ranking, start=1):
-                a_s = small_act.get(w, [math.nan])[idx_s]
-                a_m = medium_act.get(w, [math.nan])[idx_m]
-                if not (math.isfinite(a_s) and math.isfinite(a_m)):
+        fout.write("\nHuman AoA vs Neural AoA scatter:\n")
+        if common_for_aoa:
+            x_aoa = []
+            y_small_aoa = []
+            y_medium_aoa = []
+            for w in common_for_aoa:
+                if w not in word_aoa:
                     continue
-                ranks.append(r)
-                acts_small.append(a_s)
-                acts_medium.append(a_m)
-
-            if not ranks:
-                fout.write(f"  target_step={target}: no finite activations for common words.\n")
-                continue
-
-            ranks_arr = np.array(ranks, dtype=int)
-            acts_small_arr = np.array(acts_small, dtype=float)
-            acts_medium_arr = np.array(acts_medium, dtype=float)
-
-            fig3 = plt.figure()
-            plt.plot(ranks_arr, acts_small_arr, label=f"small (step {actual_s})")
-            plt.plot(ranks_arr, acts_medium_arr, label=f"medium (step {actual_m})")
-            plt.xlabel("Word rank by simplicity")
-            plt.ylabel("Activation (mean layer attention)")
-            plt.title(f"Rank vs activation at target step≈{target}")
+                x_aoa.append(word_aoa[w])
+                y_small_aoa.append(aoa_small[w])
+                y_medium_aoa.append(aoa_medium[w])
+            x_aoa = np.array(x_aoa, dtype=float)
+            y_small_aoa = np.array(y_small_aoa, dtype=float)
+            y_medium_aoa = np.array(y_medium_aoa, dtype=float)
+            fig_aoa = plt.figure()
+            plt.scatter(x_aoa, y_small_aoa, label="small", alpha=0.5)
+            plt.scatter(x_aoa, y_medium_aoa, label="medium", alpha=0.5)
+            plt.xlabel("Human AoA (months, Wordbank)")
+            plt.ylabel("Neural AoA (normalized training step)")
+            plt.title("Human AoA vs Neural AoA")
             plt.legend()
-            out_path3 = os.path.join(args.out_dir, f"rank_vs_activation_step{target}.png")
-            fig3.savefig(out_path3, bbox_inches="tight")
-            plt.close(fig3)
+            out_path_aoa = os.path.join(args.out_dir, "human_aoa_vs_neural_aoa.png")
+            fig_aoa.savefig(out_path_aoa, bbox_inches="tight")
+            plt.close(fig_aoa)
+            if len(x_aoa) > 1:
+                corr_small = np.corrcoef(x_aoa, y_small_aoa)[0, 1]
+                corr_medium = np.corrcoef(x_aoa, y_medium_aoa)[0, 1]
+            else:
+                corr_small = math.nan
+                corr_medium = math.nan
+            fout.write(f"  n_words={len(x_aoa)}, corr_small={corr_small:.4f}, corr_medium={corr_medium:.4f}\n")
+        else:
+            fout.write("  No words for human vs neural AoA scatter.\n")
 
+        fout.write("\nSurprisal trajectories stratified by human AoA bins:\n")
+        bins = [("early", 16, 20), ("mid", 21, 24), ("late", 25, 30)]
+        bin_to_words = {name: [] for name, _, _ in bins}
+        for w in simple_ranking:
+            aoa = word_aoa.get(w, math.nan)
+            if math.isnan(aoa):
+                continue
+            for name, lo, hi in bins:
+                if lo <= aoa <= hi:
+                    bin_to_words[name].append(w)
+                    break
+        for name, lo, hi in bins:
+            fout.write(f"  bin {name} ({lo}-{hi}): n_words={len(bin_to_words[name])}\n")
+        fig_bins_small = plt.figure()
+        for name, _, _ in bins:
+            words_bin = bin_to_words[name]
+            if not words_bin:
+                continue
+            avg_s = compute_avg_series(small_surpr, words_bin)
+            plt.plot(steps_small, avg_s, label=name)
+        plt.xlabel(f"{label_type_small or 'step'}")
+        plt.ylabel("Average surprisal (bits)")
+        plt.title("Small: surprisal trajectories by AoA bin")
+        plt.legend()
+        out_bins_small = os.path.join(args.out_dir, "surprisal_bins_small.png")
+        fig_bins_small.savefig(out_bins_small, bbox_inches="tight")
+        plt.close(fig_bins_small)
+        fig_bins_medium = plt.figure()
+        for name, _, _ in bins:
+            words_bin = bin_to_words[name]
+            if not words_bin:
+                continue
+            avg_m = compute_avg_series(medium_surpr, words_bin)
+            plt.plot(steps_medium, avg_m, label=name)
+        plt.xlabel(f"{label_type_medium or 'step'}")
+        plt.ylabel("Average surprisal (bits)")
+        plt.title("Medium: surprisal trajectories by AoA bin")
+        plt.legend()
+        out_bins_medium = os.path.join(args.out_dir, "surprisal_bins_medium.png")
+        fig_bins_medium.savefig(out_bins_medium, bbox_inches="tight")
+        plt.close(fig_bins_medium)
+
+        fout.write("\nSurprisal vs OWT frequency (early vs late):\n")
+        if simple_ranking:
+            early_idx_s, early_step_s = 0, steps_small[0]
+            late_idx_s, late_step_s = len(steps_small) - 1, steps_small[-1]
+            early_idx_m, early_step_m = 0, steps_medium[0]
+            late_idx_m, late_step_m = len(steps_medium) - 1, steps_medium[-1]
+            freq_words = [w for w in simple_ranking if w in owt_counts]
+            fout.write(f"  Words with OWT frequency among used: {len(freq_words)}\n")
+            def build_xy(model_surpr, idx, words):
+                xs = []
+                ys = []
+                for w in words:
+                    c = owt_counts.get(w, None)
+                    if c is None or c <= 0:
+                        continue
+                    s_val = model_surpr.get(w, [math.nan])[idx]
+                    if not math.isfinite(s_val):
+                        continue
+                    xs.append(math.log10(c))
+                    ys.append(s_val)
+                return np.array(xs, dtype=float), np.array(ys, dtype=float)
+            x_s_early, y_s_early = build_xy(small_surpr, early_idx_s, freq_words)
+            x_s_late, y_s_late = build_xy(small_surpr, late_idx_s, freq_words)
+            x_m_early, y_m_early = build_xy(medium_surpr, early_idx_m, freq_words)
+            x_m_late, y_m_late = build_xy(medium_surpr, late_idx_m, freq_words)
+            fig_freq_early = plt.figure()
+            if len(x_s_early) > 0:
+                plt.scatter(x_s_early, y_s_early, label=f"small (step {early_step_s})", alpha=0.5)
+            if len(x_m_early) > 0:
+                plt.scatter(x_m_early, y_m_early, label=f"medium (step {early_step_m})", alpha=0.5)
+            plt.xlabel("log10 OWT frequency")
+            plt.ylabel("Surprisal (bits)")
+            plt.title("Surprisal vs OWT frequency (early)")
+            plt.legend()
+            out_freq_early = os.path.join(args.out_dir, "surprisal_vs_freq_early.png")
+            fig_freq_early.savefig(out_freq_early, bbox_inches="tight")
+            plt.close(fig_freq_early)
+            fig_freq_late = plt.figure()
+            if len(x_s_late) > 0:
+                plt.scatter(x_s_late, y_s_late, label=f"small (step {late_step_s})", alpha=0.5)
+            if len(x_m_late) > 0:
+                plt.scatter(x_m_late, y_m_late, label=f"medium (step {late_step_m})", alpha=0.5)
+            plt.xlabel("log10 OWT frequency")
+            plt.ylabel("Surprisal (bits)")
+            plt.title("Surprisal vs OWT frequency (late)")
+            plt.legend()
+            out_freq_late = os.path.join(args.out_dir, "surprisal_vs_freq_late.png")
+            fig_freq_late.savefig(out_freq_late, bbox_inches="tight")
+            plt.close(fig_freq_late)
+            def corr_safe(x, y):
+                if len(x) > 1:
+                    return float(np.corrcoef(x, y)[0, 1])
+                return math.nan
             fout.write(
-                f"  target_step={target}: small_step={actual_s}, medium_step={actual_m}, n_words={len(ranks_arr)}\n"
+                f"  corr_small_early={corr_safe(x_s_early, y_s_early):.4f}, corr_small_late={corr_safe(x_s_late, y_s_late):.4f}\n"
             )
+            fout.write(
+                f"  corr_medium_early={corr_safe(x_m_early, y_m_early):.4f}, corr_medium_late={corr_safe(x_m_late, y_m_late):.4f}\n"
+            )
+        else:
+            fout.write("  No words for surprisal vs OWT frequency.\n")
 
-        frequent_set = load_owt_frequent_set(args.owt_words_txt, args.owt_top_k)
-        simple_used_set = set(simple_ranking)
-        overlap = simple_used_set & frequent_set
-        n_simple = len(simple_used_set)
-        n_overlap = len(overlap)
-        percent = 100.0 * n_overlap / n_simple if n_simple > 0 else 0.0
-        fout.write(
-            f"\nOWT frequency overlap (top {args.owt_top_k} words):\n"
-            f"  simple_words_used={n_simple}, frequent_top_k={len(frequent_set)}, overlap={n_overlap}, percent={percent:.2f}\n"
-        )
+        fout.write("\nSurprisal–activation coupling (early vs late):\n")
+        def build_supr_act(model_surpr, model_act, idx, words):
+            xs = []
+            ys = []
+            for w in words:
+                s_val = model_surpr.get(w, [math.nan])[idx]
+                a_val = model_act.get(w, [math.nan])[idx]
+                if not (math.isfinite(s_val) and math.isfinite(a_val)):
+                    continue
+                xs.append(s_val)
+                ys.append(a_val)
+            return np.array(xs, dtype=float), np.array(ys, dtype=float)
+        if simple_ranking:
+            early_idx_s, early_step_s = 0, steps_small[0]
+            late_idx_s, late_step_s = len(steps_small) - 1, steps_small[-1]
+            early_idx_m, early_step_m = 0, steps_medium[0]
+            late_idx_m, late_step_m = len(steps_medium) - 1, steps_medium[-1]
+            x_se, y_se = build_supr_act(small_surpr, small_act, early_idx_s, simple_ranking)
+            x_sl, y_sl = build_supr_act(small_surpr, small_act, late_idx_s, simple_ranking)
+            x_me, y_me = build_supr_act(medium_surpr, medium_act, early_idx_m, simple_ranking)
+            x_ml, y_ml = build_supr_act(medium_surpr, medium_act, late_idx_m, simple_ranking)
+            fig_sa_se = plt.figure()
+            if len(x_se) > 0:
+                plt.scatter(x_se, y_se, alpha=0.5)
+            plt.xlabel("Surprisal (bits)")
+            plt.ylabel("Activation (mean layer attention)")
+            plt.title(f"Small: Surprisal–activation (early step {early_step_s})")
+            out_sa_se = os.path.join(args.out_dir, "surprisal_activation_small_early.png")
+            fig_sa_se.savefig(out_sa_se, bbox_inches="tight")
+            plt.close(fig_sa_se)
+            fig_sa_sl = plt.figure()
+            if len(x_sl) > 0:
+                plt.scatter(x_sl, y_sl, alpha=0.5)
+            plt.xlabel("Surprisal (bits)")
+            plt.ylabel("Activation (mean layer attention)")
+            plt.title(f"Small: Surprisal–activation (late step {late_step_s})")
+            out_sa_sl = os.path.join(args.out_dir, "surprisal_activation_small_late.png")
+            fig_sa_sl.savefig(out_sa_sl, bbox_inches="tight")
+            plt.close(fig_sa_sl)
+            fig_sa_me = plt.figure()
+            if len(x_me) > 0:
+                plt.scatter(x_me, y_me, alpha=0.5)
+            plt.xlabel("Surprisal (bits)")
+            plt.ylabel("Activation (mean layer attention)")
+            plt.title(f"Medium: Surprisal–activation (early step {early_step_m})")
+            out_sa_me = os.path.join(args.out_dir, "surprisal_activation_medium_early.png")
+            fig_sa_me.savefig(out_sa_me, bbox_inches="tight")
+            plt.close(fig_sa_me)
+            fig_sa_ml = plt.figure()
+            if len(x_ml) > 0:
+                plt.scatter(x_ml, y_ml, alpha=0.5)
+            plt.xlabel("Surprisal (bits)")
+            plt.ylabel("Activation (mean layer attention)")
+            plt.title(f"Medium: Surprisal–activation (late step {late_step_m})")
+            out_sa_ml = os.path.join(args.out_dir, "surprisal_activation_medium_late.png")
+            fig_sa_ml.savefig(out_sa_ml, bbox_inches="tight")
+            plt.close(fig_sa_ml)
+            def corr_safe2(x, y):
+                if len(x) > 1:
+                    return float(np.corrcoef(x, y)[0, 1])
+                return math.nan
+            fout.write(
+                f"  small_early_corr={corr_safe2(x_se, y_se):.4f}, small_late_corr={corr_safe2(x_sl, y_sl):.4f}\n"
+            )
+            fout.write(
+                f"  medium_early_corr={corr_safe2(x_me, y_me):.4f}, medium_late_corr={corr_safe2(x_ml, y_ml):.4f}\n"
+            )
+        else:
+            fout.write("  No words for surprisal–activation coupling.\n")
 
 
 if __name__ == "__main__":
