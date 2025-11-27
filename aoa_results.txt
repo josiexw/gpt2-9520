@@ -1,5 +1,8 @@
 Baseline bits (random-like): 14.9000
 Label types: small=step, medium=step
+Total words with AoA in Wordbank: 569
+Words present in both models: 593
+Words used in simple ranking (<= 500): 474
 
 Average surprisal for top-k simple words and AoA thresholds (bits):
 k=10, n_words=10
@@ -26,5 +29,5 @@ Rank vs activation at selected steps:
   target_step=200000: small_step=200000, medium_step=200000, n_words=474
   target_step=392000: small_step=392000, medium_step=392000, n_words=474
 
-Cosmopedia overlap:
-  simple_words_used=474, frequent_top_k=5000, overlap=202, percent=42.62
+OWT frequency overlap (top 500 words):
+  simple_words_used=474, frequent_top_k=500, overlap=50, percent=10.55

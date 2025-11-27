@@ -8,7 +8,6 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from datasets import load_dataset
 
 
 def load_wordbank_aoa(csv_path: str) -> Dict[str, float]:
@@ -32,6 +31,25 @@ def load_wordbank_aoa(csv_path: str) -> Dict[str, float]:
         if not math.isnan(aoa):
             word_to_aoa[word] = aoa
     return word_to_aoa
+
+
+def load_owt_frequent_set(path: str, top_k: int) -> Set[str]:
+    words = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if not parts:
+                continue
+            w = parts[0].lower()
+            w = re.sub(r"\s*\([^)]*\)", "", w).strip()
+            if w:
+                words.append(w)
+            if len(words) >= top_k:
+                break
+    return set(words)
 
 
 def parse_step_from_fname(fname: str) -> Tuple[int, int, str]:
@@ -144,40 +162,6 @@ def compute_neural_aoa_steps(word_to_series: Dict[str, List[float]], steps: List
     return aoa_norm
 
 
-def count_words(text: str) -> List[str]:
-    return re.findall(r"[A-Za-z]+", text.lower())
-
-
-def compute_cosmopedia_frequent_words(simple_words: Set[str], dataset_id: str, subsets: List[str], top_k: int, token_limit: int) -> Tuple[int, int, int, float]:
-    counter = Counter()
-    total_tokens = 0
-    for subset in subsets:
-        if total_tokens >= token_limit:
-            break
-        ds = load_dataset(dataset_id, subset, split="train")
-        for ex in ds:
-            if total_tokens >= token_limit:
-                break
-            text = ex.get("text") or ""
-            tokens = count_words(text)
-            if not tokens:
-                continue
-            counter.update(tokens)
-            total_tokens += len(tokens)
-            if total_tokens >= token_limit:
-                break
-    most_common = [w for w, _ in counter.most_common(top_k)]
-    frequent_set = set(most_common)
-    simple_used = set(simple_words)
-    overlap = simple_used & frequent_set
-    n_simple = len(simple_used)
-    n_overlap = len(overlap)
-    percent = 0.0
-    if n_simple > 0:
-        percent = 100.0 * n_overlap / n_simple
-    return n_simple, n_overlap, top_k, percent
-
-
 def find_nearest_step_index(steps: List[int], target_step: int) -> Tuple[int, int]:
     if not steps:
         return -1, -1
@@ -191,15 +175,13 @@ def main():
     parser.add_argument("--small_dir", type=str, default="stanford-gpt2-small-a_results")
     parser.add_argument("--medium_dir", type=str, default="stanford-gpt2-medium-a_results")
     parser.add_argument("--wordbank_csv", type=str, default="data/wordbank_item_data.csv")
+    parser.add_argument("--owt_words_txt", type=str, default="data/owt_frequent.txt")
+    parser.add_argument("--owt_top_k", type=int, default=500)
     parser.add_argument("--out_dir", type=str, default="figs")
     parser.add_argument("--out_txt", type=str, default="aoa_results.txt")
     parser.add_argument("--max_simple", type=int, default=500)
     parser.add_argument("--ks", type=str, default="10,100,500")
     parser.add_argument("--baseline_bits", type=float, default=14.9)
-    parser.add_argument("--cosmopedia_dataset", type=str, default="HuggingFaceTB/cosmopedia")
-    parser.add_argument("--cosmopedia_subsets", type=str, default="auto_math_text,khanacademy,openstax,stanford,stories,web_samples_v1,web_samples_v2,wikihow")
-    parser.add_argument("--cosmopedia_top_k", type=int, default=5000)
-    parser.add_argument("--cosmopedia_token_limit", type=int, default=200000)
     parser.add_argument("--activation_steps", type=str, default="200,20000,200000,392000")
     args = parser.parse_args()
 
@@ -220,7 +202,10 @@ def main():
 
     with open(args.out_txt, "w") as fout:
         fout.write(f"Baseline bits (random-like): {args.baseline_bits:.4f}\n")
-        fout.write(f"Label types: small={label_type_small}, medium={label_type_medium}\n\n")
+        fout.write(f"Label types: small={label_type_small}, medium={label_type_medium}\n")
+        fout.write(f"Total words with AoA in Wordbank: {len(word_aoa)}\n")
+        fout.write(f"Words present in both models: {len(available_words)}\n")
+        fout.write(f"Words used in simple ranking (<= {args.max_simple}): {len(simple_ranking)}\n\n")
 
         fout.write("Average surprisal for top-k simple words and AoA thresholds (bits):\n")
         for k in ks:
@@ -348,18 +333,15 @@ def main():
                 f"  target_step={target}: small_step={actual_s}, medium_step={actual_m}, n_words={len(ranks_arr)}\n"
             )
 
-        subsets = [s.strip() for s in args.cosmopedia_subsets.split(",") if s.strip()]
+        frequent_set = load_owt_frequent_set(args.owt_words_txt, args.owt_top_k)
         simple_used_set = set(simple_ranking)
-        n_simple, n_overlap, top_k_freq, percent = compute_cosmopedia_frequent_words(
-            simple_used_set,
-            args.cosmopedia_dataset,
-            subsets,
-            args.cosmopedia_top_k,
-            args.cosmopedia_token_limit,
-        )
+        overlap = simple_used_set & frequent_set
+        n_simple = len(simple_used_set)
+        n_overlap = len(overlap)
+        percent = 100.0 * n_overlap / n_simple if n_simple > 0 else 0.0
         fout.write(
-            f"\nCosmopedia overlap:\n"
-            f"  simple_words_used={n_simple}, frequent_top_k={top_k_freq}, overlap={n_overlap}, percent={percent:.2f}\n"
+            f"\nOWT frequency overlap (top {args.owt_top_k} words):\n"
+            f"  simple_words_used={n_simple}, frequent_top_k={len(frequent_set)}, overlap={n_overlap}, percent={percent:.2f}\n"
         )
 
 
