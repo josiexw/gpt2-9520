@@ -1,0 +1,30 @@
+Baseline bits (random-like): 14.9000
+Label types: small=step, medium=step
+
+Average surprisal for top-k simple words and AoA thresholds (bits):
+k=10, n_words=10
+  small_thr_bits_mean=13.0015, std=1.4701, min=11.2575, max=15.3231
+  medium_thr_bits_mean=12.8711, std=1.4257, min=11.1157, max=15.1684
+k=100, n_words=100
+  small_thr_bits_mean=12.6497, std=1.5039, min=7.9259, max=16.8008
+  medium_thr_bits_mean=12.4681, std=1.5039, min=7.7817, max=16.3115
+k=500, n_words=474
+  small_thr_bits_mean=12.5063, std=1.5146, min=7.9259, max=16.8008
+  medium_thr_bits_mean=12.3311, std=1.4975, min=7.7817, max=16.3806
+
+Average activation (mean layer attention) for top-k simple words:
+k=10, n_words=10 activation plots saved.
+k=100, n_words=100 activation plots saved.
+k=500, n_words=474 activation plots saved.
+
+Neural AoA vs simplicity rank:
+Neural AoA points used: 444
+
+Rank vs activation at selected steps:
+  target_step=200: small_step=200, medium_step=200, n_words=474
+  target_step=20000: small_step=20000, medium_step=20000, n_words=474
+  target_step=200000: small_step=200000, medium_step=200000, n_words=474
+  target_step=392000: small_step=392000, medium_step=392000, n_words=474
+
+Cosmopedia overlap:
+  simple_words_used=474, frequent_top_k=5000, overlap=202, percent=42.62
