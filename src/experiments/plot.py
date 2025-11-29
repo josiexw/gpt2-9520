@@ -137,7 +137,7 @@ def compute_thresholds_per_word(word_to_series: Dict[str, List[float]], baseline
     return thr
 
 
-def compute_neural_aoa_steps(word_to_series: Dict[str, List[float]], steps: List[int], baseline_bits: float, words: List[str]) -> Dict[str, float]:
+def compute_llm_aoa_steps(word_to_series: Dict[str, List[float]], steps: List[int], baseline_bits: float, words: List[str]) -> Dict[str, float]:
     aoa_norm: Dict[str, float] = {}
     if not words:
         return aoa_norm
@@ -266,11 +266,11 @@ def main():
 
             fout.write(f"k={k}, n_words={len(words_k)} activation plots saved.\n")
 
-        aoa_small = compute_neural_aoa_steps(small_surpr, steps_small, args.baseline_bits, simple_ranking)
-        aoa_medium = compute_neural_aoa_steps(medium_surpr, steps_medium, args.baseline_bits, simple_ranking)
+        aoa_small = compute_llm_aoa_steps(small_surpr, steps_small, args.baseline_bits, simple_ranking)
+        aoa_medium = compute_llm_aoa_steps(medium_surpr, steps_medium, args.baseline_bits, simple_ranking)
         common_for_aoa = [w for w in simple_ranking if w in aoa_small and w in aoa_medium]
 
-        fout.write("\nNeural AoA vs simplicity rank:\n")
+        fout.write("\nLLM AoA vs simplicity rank:\n")
         if common_for_aoa:
             ranks = np.arange(1, len(common_for_aoa) + 1)
             y_small = np.array([aoa_small[w] for w in common_for_aoa])
@@ -280,18 +280,18 @@ def main():
             plt.plot(ranks, y_small, label="gpt2-small")
             plt.plot(ranks, y_medium, label="gpt2-medium")
             plt.xlabel("Word rank by simplicity (Wordbank AoA, lower = earlier)")
-            plt.ylabel("Neural AoA (normalized training step)")
-            plt.title("Neural AoA vs simplicity rank")
+            plt.ylabel("LLM AoA (normalized training step)")
+            plt.title("LLM AoA vs simplicity rank")
             plt.legend()
-            out_path2 = os.path.join(args.out_dir, "neural_aoa_vs_rank.png")
+            out_path2 = os.path.join(args.out_dir, "llm_aoa_vs_rank.png")
             fig2.savefig(out_path2, bbox_inches="tight")
             plt.close(fig2)
 
-            fout.write(f"Neural AoA points used: {len(common_for_aoa)}\n")
+            fout.write(f"LLM AoA points used: {len(common_for_aoa)}\n")
         else:
-            fout.write("No overlapping words for neural AoA curves.\n")
+            fout.write("No overlapping words for LLM AoA curves.\n")
 
-        fout.write("\nHuman AoA vs Neural AoA scatter:\n")
+        fout.write("\Child AoA vs LLM AoA scatter:\n")
         if common_for_aoa:
             x_aoa = []
             y_small_aoa = []
@@ -308,11 +308,11 @@ def main():
             fig_aoa = plt.figure()
             plt.scatter(x_aoa, y_small_aoa, label="gpt2-small", alpha=0.5)
             plt.scatter(x_aoa, y_medium_aoa, label="gpt2-medium", alpha=0.5)
-            plt.xlabel("Human AoA (months, Wordbank)")
-            plt.ylabel("Neural AoA (normalized training step)")
-            plt.title("Human AoA vs Neural AoA")
+            plt.xlabel("Child AoA (months, Wordbank)")
+            plt.ylabel("LLM AoA (normalized training step)")
+            plt.title("Child AoA vs LLM AoA")
             plt.legend()
-            out_path_aoa = os.path.join(args.out_dir, "human_aoa_vs_neural_aoa.png")
+            out_path_aoa = os.path.join(args.out_dir, "child_aoa_vs_llm_aoa.png")
             fig_aoa.savefig(out_path_aoa, bbox_inches="tight")
             plt.close(fig_aoa)
             if len(x_aoa) > 1:
@@ -323,9 +323,9 @@ def main():
                 corr_medium = math.nan
             fout.write(f"  n_words={len(x_aoa)}, corr_small={corr_small:.4f}, corr_medium={corr_medium:.4f}\n")
         else:
-            fout.write("  No words for human vs neural AoA scatter.\n")
+            fout.write("  No words for child vs LLM AoA scatter.\n")
 
-        fout.write("\nSurprisal trajectories stratified by human AoA bins:\n")
+        fout.write("\nSurprisal trajectories stratified by child AoA bins:\n")
         bins = [("early", 16, 20), ("mid", 21, 24), ("late", 25, 30)]
         bin_to_words = {name: [] for name, _, _ in bins}
         for w in simple_ranking:

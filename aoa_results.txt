@@ -20,13 +20,12 @@ k=10, n_words=10 activation plots saved.
 k=100, n_words=100 activation plots saved.
 k=500, n_words=474 activation plots saved.
 
-Neural AoA vs simplicity rank:
-Neural AoA points used: 444
-
-Human AoA vs Neural AoA scatter:
+LLM AoA vs simplicity rank:
+LLM AoA points used: 444
+\Child AoA vs LLM AoA scatter:
   n_words=444, corr_small=0.0002, corr_medium=0.0359
 
-Surprisal trajectories stratified by human AoA bins:
+Surprisal trajectories stratified by child AoA bins:
   bin early (16-20): n_words=34
   bin mid (21-24): n_words=148
   bin late (25-30): n_words=292
