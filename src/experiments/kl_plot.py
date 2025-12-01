@@ -151,6 +151,28 @@ def build_llm_distributions(word_to_surpr: Dict[str, List[float]], steps: List[i
     return P, np.array(steps, dtype=float)
 
 
+def build_attention_distributions(word_to_act: Dict[str, List[float]], steps: List[int], words: List[str], baseline_val: float = 0.0) -> Tuple[np.ndarray, np.ndarray]:
+    T = len(steps)
+    W = len(words)
+    A = np.full((T, W), baseline_val, dtype=float)
+    for j, w in enumerate(words):
+        a_series = np.array(word_to_act.get(w, []), dtype=float)
+        if a_series.shape[0] != T:
+            if a_series.shape[0] == 0:
+                continue
+            a_padded = np.full(T, baseline_val, dtype=float)
+            n = min(T, a_series.shape[0])
+            a_padded[:n] = np.nan_to_num(a_series[:n], nan=baseline_val, posinf=baseline_val, neginf=baseline_val)
+            a_series = a_padded
+        else:
+            a_series = np.nan_to_num(a_series, nan=baseline_val, posinf=baseline_val, neginf=baseline_val)
+        A[:, j] = a_series
+    logits = A - A.max(axis=1, keepdims=True)
+    P = np.exp(logits)
+    P = P / P.sum(axis=1, keepdims=True)
+    return P, np.array(steps, dtype=float)
+
+
 def build_child_distributions(months: List[int], word_to_curve: Dict[str, np.ndarray], words: List[str]) -> Tuple[np.ndarray, np.ndarray]:
     M = len(months)
     W = len(words)
@@ -198,12 +220,16 @@ def main():
 
     P_small_full, steps_small_arr_full = build_llm_distributions(small_surpr, steps_small, words_for_kl, args.baseline_bits)
     P_medium_full, steps_medium_arr_full = build_llm_distributions(medium_surpr, steps_medium, words_for_kl, args.baseline_bits)
+    A_small_full, _ = build_attention_distributions(small_act, steps_small, words_for_kl)
+    A_medium_full, _ = build_attention_distributions(medium_act, steps_medium, words_for_kl)
     C_child, months_arr = build_child_distributions(months, word_to_curve, words_for_kl)
 
     P_small = P_small_full[1:]
     steps_small_arr = steps_small_arr_full[1:]
     P_medium = P_medium_full[1:]
     steps_medium_arr = steps_medium_arr_full[1:]
+    A_small = A_small_full[1:]
+    A_medium = A_medium_full[1:]
 
     M = C_child.shape[0]
     T_small = P_small.shape[0]
@@ -220,6 +246,21 @@ def main():
             KL_small[mi, ti] = kl_divergence(child_vec, P_small[ti])
         for ti in range(T_medium):
             KL_medium[mi, ti] = kl_divergence(child_vec, P_medium[ti])
+
+    KL_sa_small = np.full((T_small, T_small), np.nan, dtype=float)
+    KL_sa_medium = np.full((T_medium, T_medium), np.nan, dtype=float)
+
+    for i in range(T_small):
+        for j in range(T_small):
+            d1 = kl_divergence(P_small[i], A_small[j])
+            d2 = kl_divergence(A_small[j], P_small[i])
+            KL_sa_small[i, j] = 0.5 * (d1 + d2)
+
+    for i in range(T_medium):
+        for j in range(T_medium):
+            d1 = kl_divergence(P_medium[i], A_medium[j])
+            d2 = kl_divergence(A_medium[j], P_medium[i])
+            KL_sa_medium[i, j] = 0.5 * (d1 + d2)
 
     with open(args.out_txt, "w") as fout:
         fout.write(f"Words used for KL analyses (<= {args.max_simple}): {len(words_for_kl)}\n\n")
@@ -251,19 +292,52 @@ def main():
             ti = int(np.nanargmin(row))
             fout.write(f"  month={months_arr[mi]:.1f}, best_checkpoint_index={ti+1}, step={steps_medium_arr[ti]}, KL={row[ti]:.4f}\n")
 
-    mean_kl_small = np.nanmean(KL_small, axis=0)
-    mean_kl_medium = np.nanmean(KL_medium, axis=0)
+        fout.write("\nSymmetric KL between surprisal- and attention-based distributions (small):\n")
+        fout.write(f"  min={np.nanmin(KL_sa_small):.4f}, max={np.nanmax(KL_sa_small):.4f}\n")
+        fout.write("Symmetric KL between surprisal- and attention-based distributions (medium):\n")
+        fout.write(f"  min={np.nanmin(KL_sa_medium):.4f}, max={np.nanmax(KL_sa_medium):.4f}\n")
 
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.plot(steps_small_arr, mean_kl_small, label="GPT2-small")
-    ax.plot(steps_medium_arr, mean_kl_medium, label="GPT2-medium")
-    ax.set_xlabel("Training step")
-    ax.set_ylabel("KL(child || LLM)")
-    ax.set_title("KL divergence vs training step")
-    ax.set_xscale("log")
-    ax.legend()
+    fig, ax = plt.subplots(figsize=(8, 5))
+    im = ax.imshow(KL_small, aspect="auto", origin="lower", interpolation="nearest")
+    ax.set_title("KL(child month || GPT2-small checkpoint)")
+    ax.set_xlabel("Checkpoint index (starting at 1)")
+    ax.set_ylabel("Month index")
+    fig.colorbar(im, ax=ax, label="KL divergence")
     fig.tight_layout()
-    out_path = os.path.join(args.out_dir, "kl_child_vs_checkpoint.png")
+    out_path = os.path.join(args.out_dir, "kl_child_vs_small_heatmap.png")
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    im = ax.imshow(KL_medium, aspect="auto", origin="lower", interpolation="nearest")
+    ax.set_title("KL(child month || GPT2-medium checkpoint)")
+    ax.set_xlabel("Checkpoint index (starting at 1)")
+    ax.set_ylabel("Month index")
+    fig.colorbar(im, ax=ax, label="KL divergence")
+    fig.tight_layout()
+    out_path = os.path.join(args.out_dir, "kl_child_vs_medium_heatmap.png")
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(KL_sa_small, aspect="auto", origin="lower", interpolation="nearest")
+    ax.set_title("Symmetric KL: surprisal vs attention (GPT2-small)")
+    ax.set_xlabel("Attention checkpoint index")
+    ax.set_ylabel("Surprisal checkpoint index")
+    fig.colorbar(im, ax=ax, label="Symmetric KL")
+    fig.tight_layout()
+    out_path = os.path.join(args.out_dir, "kl_suprisal_vs_attention_small.png")
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(KL_sa_medium, aspect="auto", origin="lower", interpolation="nearest")
+    ax.set_title("Symmetric KL: surprisal vs attention (GPT2-medium)")
+    ax.set_xlabel("Attention checkpoint index")
+    ax.set_ylabel("Surprisal checkpoint index")
+    fig.colorbar(im, ax=ax, label="Symmetric KL")
+    fig.tight_layout()
+    out_path = os.path.join(args.out_dir, "kl_suprisal_vs_attention_medium.png")
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
 
