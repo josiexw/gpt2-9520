@@ -269,7 +269,7 @@ def main():
                 f"  medium_thr_bits_mean={med_mean:.4f}, std={med_std:.4f}, min={med_min:.4f}, max={med_max:.4f}\n"
             )
 
-        fout.write("\nAverage attention (mean layer attention) for top-k simple words:\n")
+        fout.write("\nMean layer attention for top-k simple words:\n")
         for k in ks:
             words_k = simple_ranking[:k]
             avg_small_act = compute_avg_series(small_act, words_k)
@@ -279,7 +279,7 @@ def main():
             plt.plot(steps_small, avg_small_act, label="gpt2-small")
             plt.plot(steps_medium, avg_medium_act, label="gpt2-medium")
             plt.xlabel(f"{label_type_small or 'step'}")
-            plt.ylabel("Average attention (mean layer attention)")
+            plt.ylabel("Mean layer attention")
             plt.title(f"Top {k} simple words: attention vs {label_type_small or 'step'}")
             plt.legend()
             out_path = os.path.join(args.out_dir, f"avg_attention_top{k}.png")
