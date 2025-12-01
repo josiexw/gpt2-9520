@@ -203,7 +203,7 @@ def main():
     parser.add_argument("--max_simple", type=int, default=500)
     parser.add_argument("--ks", type=str, default="10,100,500")
     parser.add_argument("--baseline_bits", type=float, default=14.9)
-    parser.add_argument("--activation_steps", type=str, default="200,20000,200000,392000")
+    parser.add_argument("--attention_steps", type=str, default="200,20000,200000,392000")
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -221,7 +221,7 @@ def main():
 
     simple_ranking = get_simple_ranking(word_aoa, available_words, args.max_simple)
     ks = [int(x) for x in args.ks.split(",") if x.strip()]
-    activation_steps = [int(x) for x in args.activation_steps.split(",") if x.strip()]
+    attention_steps = [int(x) for x in args.attention_steps.split(",") if x.strip()]
 
     with open(args.out_txt, "w") as fout:
         fout.write(f"Baseline bits (random-like): {args.baseline_bits:.4f}\n")
@@ -269,7 +269,7 @@ def main():
                 f"  medium_thr_bits_mean={med_mean:.4f}, std={med_std:.4f}, min={med_min:.4f}, max={med_max:.4f}\n"
             )
 
-        fout.write("\nAverage activation (mean layer attention) for top-k simple words:\n")
+        fout.write("\nAverage attention (mean layer attention) for top-k simple words:\n")
         for k in ks:
             words_k = simple_ranking[:k]
             avg_small_act = compute_avg_series(small_act, words_k)
@@ -279,14 +279,14 @@ def main():
             plt.plot(steps_small, avg_small_act, label="gpt2-small")
             plt.plot(steps_medium, avg_medium_act, label="gpt2-medium")
             plt.xlabel(f"{label_type_small or 'step'}")
-            plt.ylabel("Average activation (mean layer attention)")
-            plt.title(f"Top {k} simple words: activation vs {label_type_small or 'step'}")
+            plt.ylabel("Average attention (mean layer attention)")
+            plt.title(f"Top {k} simple words: attention vs {label_type_small or 'step'}")
             plt.legend()
-            out_path = os.path.join(args.out_dir, f"avg_activation_top{k}.png")
+            out_path = os.path.join(args.out_dir, f"avg_attention_top{k}.png")
             fig.savefig(out_path, bbox_inches="tight")
             plt.close(fig)
 
-            fout.write(f"k={k}, n_words={len(words_k)} activation plots saved.\n")
+            fout.write(f"k={k}, n_words={len(words_k)} attention plots saved.\n")
 
         aoa_small = compute_llm_aoa_steps(small_surpr, steps_small, args.baseline_bits, simple_ranking)
         aoa_medium = compute_llm_aoa_steps(medium_surpr, steps_medium, args.baseline_bits, simple_ranking)
@@ -506,7 +506,7 @@ def main():
         else:
             fout.write("  No words for surprisal vs OWT frequency.\n")
 
-        fout.write("\nSurprisal-activation coupling (early vs late):\n")
+        fout.write("\nSurprisal-attention coupling (early vs late):\n")
 
         def build_supr_act(model_surpr, model_act, idx, words):
             xs = []
@@ -535,9 +535,9 @@ def main():
             if len(x_se) > 0:
                 plt.scatter(x_se, y_se, alpha=0.5)
             plt.xlabel("Surprisal (bits)")
-            plt.ylabel("Activation (mean layer attention)")
-            plt.title(f"Small: Surprisal-activation (early step {early_step_s})")
-            out_sa_se = os.path.join(args.out_dir, "surprisal_activation_small_early.png")
+            plt.ylabel("Mean layer attention")
+            plt.title(f"Small: Surprisal-attention (early step {early_step_s})")
+            out_sa_se = os.path.join(args.out_dir, "surprisal_attention_small_early.png")
             fig_sa_se.savefig(out_sa_se, bbox_inches="tight")
             plt.close(fig_sa_se)
 
@@ -545,9 +545,9 @@ def main():
             if len(x_sl) > 0:
                 plt.scatter(x_sl, y_sl, alpha=0.5)
             plt.xlabel("Surprisal (bits)")
-            plt.ylabel("Activation (mean layer attention)")
-            plt.title(f"Small: Surprisal-activation (late step {late_step_s})")
-            out_sa_sl = os.path.join(args.out_dir, "surprisal_activation_small_late.png")
+            plt.ylabel("Mean layer attention")
+            plt.title(f"Small: Surprisal-attention (late step {late_step_s})")
+            out_sa_sl = os.path.join(args.out_dir, "surprisal_attention_small_late.png")
             fig_sa_sl.savefig(out_sa_sl, bbox_inches="tight")
             plt.close(fig_sa_sl)
 
@@ -555,9 +555,9 @@ def main():
             if len(x_me) > 0:
                 plt.scatter(x_me, y_me, alpha=0.5)
             plt.xlabel("Surprisal (bits)")
-            plt.ylabel("Activation (mean layer attention)")
-            plt.title(f"Medium: Surprisal-activation (early step {early_step_m})")
-            out_sa_me = os.path.join(args.out_dir, "surprisal_activation_medium_early.png")
+            plt.ylabel("Mean layer attention")
+            plt.title(f"Medium: Surprisal-attention (early step {early_step_m})")
+            out_sa_me = os.path.join(args.out_dir, "surprisal_attention_medium_early.png")
             fig_sa_me.savefig(out_sa_me, bbox_inches="tight")
             plt.close(fig_sa_me)
 
@@ -565,9 +565,9 @@ def main():
             if len(x_ml) > 0:
                 plt.scatter(x_ml, y_ml, alpha=0.5)
             plt.xlabel("Surprisal (bits)")
-            plt.ylabel("Activation (mean layer attention)")
-            plt.title(f"Medium: Surprisal-activation (late step {late_step_m})")
-            out_sa_ml = os.path.join(args.out_dir, "surprisal_activation_medium_late.png")
+            plt.ylabel("Mean layer attention")
+            plt.title(f"Medium: Surprisal-attention (late step {late_step_m})")
+            out_sa_ml = os.path.join(args.out_dir, "surprisal_attention_medium_late.png")
             fig_sa_ml.savefig(out_sa_ml, bbox_inches="tight")
             plt.close(fig_sa_ml)
 
@@ -583,7 +583,7 @@ def main():
                 f"  medium_early_corr={corr_safe2(x_me, y_me):.4f}, medium_late_corr={corr_safe2(x_ml, y_ml):.4f}\n"
             )
         else:
-            fout.write("  No words for surprisal-activation coupling.\n")
+            fout.write("  No words for surprisal-attention coupling.\n")
 
 
 if __name__ == "__main__":

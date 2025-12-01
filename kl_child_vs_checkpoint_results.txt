@@ -39,8 +39,3 @@ Per-month argmin KL for medium model:
   month=28.0, best_checkpoint_index=14, step=32000.0, KL=4.0983
   month=29.0, best_checkpoint_index=14, step=32000.0, KL=4.0920
   month=30.0, best_checkpoint_index=14, step=32000.0, KL=4.0717
-
-Symmetric KL between surprisal- and activation-based distributions (small):
-  min=3.4237, max=4.8920
-Symmetric KL between surprisal- and activation-based distributions (medium):
-  min=3.4149, max=3.9915

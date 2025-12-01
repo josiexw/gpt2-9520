@@ -15,10 +15,10 @@ k=500, n_words=474
   small_thr_bits_mean=12.5063, std=1.5146, min=7.9259, max=16.8008
   medium_thr_bits_mean=12.3311, std=1.4975, min=7.7817, max=16.3806
 
-Average activation (mean layer attention) for top-k simple words:
-k=10, n_words=10 activation plots saved.
-k=100, n_words=100 activation plots saved.
-k=500, n_words=474 activation plots saved.
+Average attention (mean layer attention) for top-k simple words:
+k=10, n_words=10 attention plots saved.
+k=100, n_words=100 attention plots saved.
+k=500, n_words=474 attention plots saved.
 
 LLM AoA vs simplicity rank:
 LLM AoA points used: 444
@@ -36,6 +36,6 @@ Surprisal vs OWT frequency (early vs late):
   corr_small_early=0.1453, corr_small_late=-0.6139
   corr_medium_early=-0.2578, corr_medium_late=-0.6229
 
-Surprisal-activation coupling (early vs late):
+Surprisal-attention coupling (early vs late):
   small_early_corr=-0.1147, small_late_corr=-0.0249
   medium_early_corr=-0.1146, medium_late_corr=-0.1772
