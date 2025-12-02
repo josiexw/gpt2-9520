@@ -32,11 +32,12 @@ def get_word_frequencies(max_docs: int, word_set: set):
 
 def main():
     parser = argparse.ArgumentParser(description='Parse OWT for common children words.')
+    parser.add_argument('--cosmopedia_pkl', type=str, required=True)
     parser.add_argument('--max_docs', type=int, default=10000000)
     parser.add_argument('--output_path', type=str, required=True)
     args = parser.parse_args()
 
-    with open('C:\\Users\\olivi\\OneDrive\\Desktop\\PythonPrograms\\gpt2-9520\\data\\contexts_cosmopedia.pkl', 'rb') as f:
+    with open(args.cosmopedia_pkl, 'rb') as f:
         cosmopedia_dict = pickle.load(f)
 
     word_set = set(cosmopedia_dict.keys())
