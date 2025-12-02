@@ -212,7 +212,8 @@ def compute_llm_aoa_steps(
         if not np.isfinite(y_min) or not np.isfinite(y_max) or y_max == y_min:
             continue
 
-        thr = 0.5 * (baseline_bits + y_min)
+        baseline_w = y[0]
+        thr = 0.5 * (baseline_w + y_min)
 
         L0 = max(y_max - y_min, 1e-3)
         b0 = y_min
