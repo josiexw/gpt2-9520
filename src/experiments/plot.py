@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple, Set
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
 
 def load_wordbank_aoa(csv_path: str) -> Dict[str, float]:
@@ -158,30 +159,88 @@ def compute_thresholds_per_word(word_to_series: Dict[str, List[float]], baseline
     return thr
 
 
-def compute_llm_aoa_steps(word_to_series: Dict[str, List[float]], steps: List[int], baseline_bits: float, words: List[str]) -> Dict[str, float]:
-    aoa_norm: Dict[str, float] = {}
+def logistic4(x, L, k, x0, b):
+    x = np.asarray(x, dtype=float)
+    z = k * (x - x0)
+    z = np.clip(z, -60, 60)
+    return L / (1.0 + np.exp(z)) + b
+
+
+def compute_llm_aoa_steps(
+    word_to_series: Dict[str, List[float]],
+    steps: List[int],
+    baseline_bits: float,
+    words: List[str],
+) -> Dict[str, float]:
+    aoa_log10: Dict[str, float] = {}
     if not words:
-        return aoa_norm
+        return aoa_log10
+
     step_arr = np.array(steps, dtype=float)
-    min_step = float(np.min(step_arr))
-    max_step = float(np.max(step_arr))
-    span = max_step - min_step if max_step > min_step else 1.0
+    log_steps = np.log10(step_arr)
+
     for w in words:
         s = np.array(word_to_series[w], dtype=float)
-        if not np.isfinite(s).any():
+        mask = np.isfinite(s)
+        if mask.sum() < 4:
             continue
-        s_min = float(np.nanmin(s))
-        thr = 0.5 * (baseline_bits + s_min)
-        idx_val = None
-        for j, v in enumerate(s):
-            if np.isfinite(v) and v <= thr:
-                idx_val = j
-                break
-        if idx_val is None:
-            continue
-        step_val = float(step_arr[idx_val])
-        aoa_norm[w] = (step_val - min_step) / span
-    return aoa_norm
+
+        x = log_steps[mask]
+        y = s[mask]
+
+        y_min = float(np.min(y))
+        y_max = float(np.max(y))
+        thr = 0.5 * (baseline_bits + y_min)
+
+        L0 = max(y_max - y_min, 1e-3)
+        b0 = y_min
+        x0_0 = float(np.median(x))
+        k0 = 1.0
+
+        x_star = None
+
+        try:
+            popt, _ = curve_fit(
+                logistic4,
+                x,
+                y,
+                p0=[L0, k0, x0_0, b0],
+                maxfev=10000,
+            )
+            L, k, x0, b = popt
+            if L <= 0 or k <= 0:
+                raise RuntimeError("non-decreasing fit")
+
+            f_min = float(logistic4(x.min(), *popt))
+            f_max = float(logistic4(x.max(), *popt))
+            hi = max(f_min, f_max)
+            lo = min(f_min, f_max)
+            if not (lo <= thr <= hi):
+                raise RuntimeError("threshold outside fit range")
+
+            lo_x = x.min()
+            hi_x = x.max()
+            for _ in range(60):
+                mid_x = 0.5 * (lo_x + hi_x)
+                val = float(logistic4(mid_x, *popt))
+                if val > thr:
+                    lo_x = mid_x
+                else:
+                    hi_x = mid_x
+            x_star = 0.5 * (lo_x + hi_x)
+        except Exception:
+            idx_val = None
+            for j, v in enumerate(y):
+                if np.isfinite(v) and v <= thr:
+                    idx_val = j
+                    break
+            if idx_val is not None:
+                x_star = float(x[idx_val])
+
+        if x_star is not None:
+            aoa_log10[w] = x_star
+
+    return aoa_log10
 
 
 def find_nearest_step_index(steps: List[int], target_step: int) -> Tuple[int, int]:
@@ -302,7 +361,7 @@ def main():
             plt.plot(ranks, y_small, label="gpt2-small")
             plt.plot(ranks, y_medium, label="gpt2-medium")
             plt.xlabel("Word rank by simplicity (Wordbank AoA, lower = earlier)")
-            plt.ylabel("LLM AoA (normalized training step)")
+            plt.ylabel("LLM AoA (log10 training step)")
             plt.title("LLM AoA vs simplicity rank")
             plt.legend()
             out_path2 = os.path.join(args.out_dir, "llm_aoa_vs_rank.png")
@@ -318,6 +377,22 @@ def main():
             max_words_side_by_side = 50
             n_plotted = 0
             margin_idx = 2
+
+            def normalize_x(xs: np.ndarray) -> np.ndarray:
+                xs = np.array(xs, dtype=float)
+                if xs.size == 0:
+                    return xs
+                denom = xs[-1] - xs[0]
+                if denom <= 0:
+                    return np.zeros_like(xs)
+                return (xs - xs[0]) / denom
+
+            months_arr = np.array(months, dtype=float)
+            if months_arr.size > 1:
+                months_norm = (months_arr - months_arr.min()) / (months_arr.max() - months_arr.min())
+            else:
+                months_norm = np.zeros_like(months_arr)
+
             for w in common_for_aoa:
                 if w not in word_to_curve:
                     continue
@@ -360,7 +435,7 @@ def main():
                 if s_small_crop is None and s_medium_crop is None:
                     continue
 
-                fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+                fig, axes = plt.subplots(1, 3, figsize=(12, 3))
 
                 if s_small_crop is not None and len(s_small_crop) > 0:
                     axes[0].plot(steps_small_crop, s_small_crop, label="gpt2-small")
@@ -383,6 +458,32 @@ def main():
                 axes[1].set_ylabel("Proportion producing")
                 axes[1].set_ylim(0.0, 1.0)
                 axes[1].set_title(f"{w} - children")
+
+                ax3 = axes[2]
+                ax3b = ax3.twinx()
+
+                if s_small_crop is not None and len(s_small_crop) > 0:
+                    x_small_norm = normalize_x(steps_small_crop)
+                    ax3.plot(x_small_norm, s_small_crop, label="gpt2-small")
+                if s_medium_crop is not None and len(s_medium_crop) > 0:
+                    x_medium_norm = normalize_x(steps_medium_crop)
+                    ax3.plot(x_medium_norm, s_medium_crop, label="gpt2-medium")
+
+                child_mask = np.isfinite(child_curve)
+                if child_mask.any():
+                    ax3b.plot(months_norm[child_mask], child_curve[child_mask], marker="o", color="green", label="children")
+
+                ax3.set_xlim(0.0, 1.0)
+                ax3.set_xlabel("Normalized timeline")
+                ax3.set_ylabel("Surprisal (bits)")
+                ax3b.set_ylabel("Proportion producing")
+                ax3.set_title(f"{w} - normalized overlay")
+                ax3.invert_yaxis()
+
+                handles1, labels1 = ax3.get_legend_handles_labels()
+                handles2, labels2 = ax3b.get_legend_handles_labels()
+                if handles1 or handles2:
+                    ax3.legend(handles1 + handles2, labels1 + labels2, loc="best")
 
                 fig.tight_layout()
                 safe_w = re.sub(r"[^A-Za-z0-9]+", "_", w).strip("_")
