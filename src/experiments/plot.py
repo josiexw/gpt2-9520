@@ -185,22 +185,33 @@ def compute_llm_aoa_steps(
         return aoa_log10
 
     step_arr = np.array(steps, dtype=float)
-    log_steps = np.log10(step_arr)
+    log_steps = np.full_like(step_arr, np.nan, dtype=float)
+    positive_mask = step_arr > 0
+    log_steps[positive_mask] = np.log10(step_arr[positive_mask])
 
     for w in words:
         s = np.array(word_to_series[w], dtype=float)
         base_mask = np.isfinite(s)
-        step_mask = np.isfinite(log_steps) & (step_arr > 0)
+        step_mask = np.isfinite(log_steps)
         mask = base_mask & step_mask
-        
+
         if mask.sum() < 4:
             continue
 
         x = log_steps[mask]
         y = s[mask]
+        order = np.argsort(x)
+        x = x[order]
+        y = y[order]
+
+        if x.size < 2:
+            continue
 
         y_min = float(np.min(y))
         y_max = float(np.max(y))
+        if not np.isfinite(y_min) or not np.isfinite(y_max) or y_max == y_min:
+            continue
+
         thr = 0.5 * (baseline_bits + y_min)
 
         L0 = max(y_max - y_min, 1e-3)
@@ -219,36 +230,58 @@ def compute_llm_aoa_steps(
                 maxfev=10000,
             )
             L, k, x0, b = popt
-            if L <= 0 or k <= 0:
-                raise RuntimeError("non-decreasing fit")
 
-            f_min = float(logistic4(x.min(), *popt))
-            f_max = float(logistic4(x.max(), *popt))
-            hi = max(f_min, f_max)
-            lo = min(f_min, f_max)
-            if not (lo <= thr <= hi):
+            if L * k == 0:
+                raise RuntimeError("flat logistic fit")
+
+            f_lo = float(logistic4(x[0], *popt))
+            f_hi = float(logistic4(x[-1], *popt))
+
+            lo_val = min(f_lo, f_hi)
+            hi_val = max(f_lo, f_hi)
+
+            if not (lo_val <= thr <= hi_val):
                 raise RuntimeError("threshold outside fit range")
 
-            lo_x = x.min()
-            hi_x = x.max()
-            for _ in range(60):
-                mid_x = 0.5 * (lo_x + hi_x)
-                val = float(logistic4(mid_x, *popt))
-                if val > thr:
-                    lo_x = mid_x
-                else:
-                    hi_x = mid_x
+            lo_x = x[0]
+            hi_x = x[-1]
+
+            if f_lo <= f_hi:
+                for _ in range(60):
+                    mid_x = 0.5 * (lo_x + hi_x)
+                    val = float(logistic4(mid_x, *popt))
+                    if val < thr:
+                        lo_x = mid_x
+                    else:
+                        hi_x = mid_x
+            else:
+                for _ in range(60):
+                    mid_x = 0.5 * (lo_x + hi_x)
+                    val = float(logistic4(mid_x, *popt))
+                    if val > thr:
+                        lo_x = mid_x
+                    else:
+                        hi_x = mid_x
+
             x_star = 0.5 * (lo_x + hi_x)
-        except Exception as e:  # fallback to linear scan
+
+        except Exception as e:  # fallback find crossing
             idx_val = None
-            for j, v in enumerate(y):
-                if np.isfinite(v) and v <= thr:
+
+            for j in range(1, len(y)):
+                y_prev, y_curr = y[j - 1], y[j]
+                if not (np.isfinite(y_prev) and np.isfinite(y_curr)):
+                    continue
+
+                if (y_prev - thr) * (y_curr - thr) <= 0:
                     idx_val = j
                     break
-            if idx_val is not None:
-                x_star = float(x[idx_val])
 
-        if x_star is not None:
+            if idx_val is None:  # fallback linear scan
+                idx_val = int(np.argmin(np.abs(y - thr)))
+            x_star = float(x[idx_val])
+
+        if x_star is not None and np.isfinite(x_star):
             aoa_log10[w] = x_star
 
     return aoa_log10

@@ -21,7 +21,7 @@ k=100, n_words=100 attention plots saved.
 k=500, n_words=474 attention plots saved.
 
 LLM AoA vs simplicity rank:
-LLM AoA points used: 444
+LLM AoA points used: 474
 
 Child trajectories vs LLM surprisal (per word):
   Side-by-side plots saved for 50 words.
