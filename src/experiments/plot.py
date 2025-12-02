@@ -199,6 +199,7 @@ def compute_llm_aoa_steps(
         y_min = float(np.min(y))
         y_max = float(np.max(y))
         thr = 0.5 * (baseline_bits + y_min)
+        print("THRESHOLD", thr)
 
         L0 = max(y_max - y_min, 1e-3)
         b0 = y_min
@@ -236,7 +237,9 @@ def compute_llm_aoa_steps(
                 else:
                     hi_x = mid_x
             x_star = 0.5 * (lo_x + hi_x)
-        except Exception:
+            print("X_STAR", x_star)
+        except Exception as e:
+            print(e)
             idx_val = None
             for j, v in enumerate(y):
                 if np.isfinite(v) and v <= thr:

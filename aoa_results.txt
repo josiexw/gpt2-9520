@@ -24,21 +24,3 @@ LLM AoA vs simplicity rank:
 LLM AoA points used: 444
 
 Child trajectories vs LLM surprisal (per word):
-  Side-by-side plots saved for 50 words.
-
-Child trajectories vs LLM attention (per word):
-  Side-by-side attention plots saved for 50 words.
-
-Surprisal trajectories stratified by child AoA bins:
-  bin early (16-20): n_words=34
-  bin mid (21-24): n_words=148
-  bin late (25-30): n_words=292
-
-Surprisal vs OWT frequency (early vs late):
-  Words with OWT frequency among used: 92
-  corr_small_early=0.0686, corr_small_late=-0.5985
-  corr_medium_early=-0.2017, corr_medium_late=-0.5890
-
-Surprisal-attention coupling (early vs late):
-  small_early_corr=-0.1147, small_late_corr=-0.0249
-  medium_early_corr=-0.1146, medium_late_corr=-0.1772
