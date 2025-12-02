@@ -155,16 +155,22 @@ def compute_avg_series(word_to_series: Dict[str, List[float]], words: List[str])
         return np.nanmean(arr, axis=0)
 
 
-def compute_thresholds_per_word(word_to_series: Dict[str, List[float]], baseline_bits: float, words: List[str]) -> Dict[str, float]:
-    thr = {}
-    for w in words:
-        s = np.array(word_to_series[w], dtype=float)
-        if not np.isfinite(s).any():
-            continue
-        s_min = float(np.nanmin(s))
-        t = 0.5 * (baseline_bits + s_min)
-        thr[w] = t
-    return thr
+def compute_thresholds_per_word(
+    word_to_series: Dict[str, List[float]],
+    baseline_bits: float,
+    words: List[str],
+    steps: List[int],
+) -> Dict[str, float]:
+    aoa_log10 = compute_llm_aoa_steps(
+        word_to_series=word_to_series,
+        steps=steps,
+        baseline_bits=baseline_bits,
+        words=words,
+    )
+    aoa_steps = {}
+    for w, x_star in aoa_log10.items():
+        aoa_steps[w] = float(10.0 ** x_star)
+    return aoa_steps
 
 
 def logistic4(x, L, k, x0, b):
@@ -299,7 +305,7 @@ def main():
     parser.add_argument("--out_txt", type=str, default="aoa_results.txt")
     parser.add_argument("--max_simple", type=int, default=500)
     parser.add_argument("--ks", type=str, default="10,100,500")
-    parser.add_argument("--baseline_bits", type=float, default=14.9)
+    parser.add_argument("--baseline_bits", type=float, default=15.6)
     parser.add_argument("--attention_steps", type=str, default="200,20000,200000,392000")
     args = parser.parse_args()
 
@@ -333,14 +339,14 @@ def main():
             avg_small = compute_avg_series(small_surpr, words_k)
             avg_medium = compute_avg_series(medium_surpr, words_k)
 
-            thr_small_dict = compute_thresholds_per_word(small_surpr, args.baseline_bits, words_k)
-            thr_medium_dict = compute_thresholds_per_word(medium_surpr, args.baseline_bits, words_k)
-
             def stats_from_thr(d: Dict[str, float]) -> Tuple[float, float, float, float]:
                 if not d:
                     return math.nan, math.nan, math.nan, math.nan
                 vals = np.array(list(d.values()), dtype=float)
                 return float(np.mean(vals)), float(np.std(vals)), float(np.min(vals)), float(np.max(vals))
+
+            thr_small_dict = compute_thresholds_per_word(small_surpr, args.baseline_bits, words_k, steps_small)
+            thr_medium_dict = compute_thresholds_per_word(medium_surpr, args.baseline_bits, words_k, steps_medium)
 
             small_mean, small_std, small_min, small_max = stats_from_thr(thr_small_dict)
             med_mean, med_std, med_min, med_max = stats_from_thr(thr_medium_dict)
@@ -349,9 +355,9 @@ def main():
             plt.plot(steps_small, avg_small, label="gpt2-small")
             plt.plot(steps_medium, avg_medium, label="gpt2-medium")
             if not math.isnan(small_mean):
-                plt.axhline(small_mean, linestyle="--", linewidth=1, color="cornflowerblue", label="AoA threshold small (mean)")
+                plt.axvline(small_mean, linestyle="--", linewidth=1, color="cornflowerblue", label="AoA small (mean step)")
             if not math.isnan(med_mean):
-                plt.axhline(med_mean, linestyle="--", linewidth=1, color="orange", label="AoA threshold medium (mean)")
+                plt.axvline(med_mean, linestyle="--", linewidth=1, color="orange", label="AoA medium (mean step)")
             plt.xlabel(f"{label_type_small or 'step'}")
             plt.ylabel("Average surprisal (bits)")
             plt.title(f"Top {k} simple words: surprisal vs {label_type_small or 'step'}")

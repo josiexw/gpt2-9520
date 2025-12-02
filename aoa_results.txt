@@ -1,4 +1,4 @@
-Baseline bits (random-like): 14.9000
+Baseline bits (random-like): 15.6000
 Label types: small=step, medium=step
 Total words with AoA in Wordbank: 569
 Words present in both models: 593
@@ -6,14 +6,14 @@ Words used in simple ranking (<= 500): 474
 
 Average surprisal for top-k simple words and AoA thresholds (bits):
 k=10, n_words=10
-  small_thr_bits_mean=13.0015, std=1.4701, min=11.2575, max=15.3231
-  medium_thr_bits_mean=12.8711, std=1.4257, min=11.1157, max=15.1684
+  small_thr_bits_mean=17829.1702, std=48818.9033, min=1.0000, max=164000.0000
+  medium_thr_bits_mean=2890.7663, std=5631.3773, min=6.2273, max=15200.0000
 k=100, n_words=100
-  small_thr_bits_mean=12.6497, std=1.5039, min=7.9259, max=16.8008
-  medium_thr_bits_mean=12.4681, std=1.5039, min=7.7817, max=16.3115
+  small_thr_bits_mean=11203.1932, std=38414.7065, min=1.0000, max=212000.0000
+  medium_thr_bits_mean=10274.6286, std=44428.7579, min=1.4288, max=344000.0000
 k=500, n_words=474
-  small_thr_bits_mean=12.5063, std=1.5146, min=7.9259, max=16.8008
-  medium_thr_bits_mean=12.3311, std=1.4975, min=7.7817, max=16.3806
+  small_thr_bits_mean=14377.7901, std=50055.6511, min=1.0000, max=368000.0000
+  medium_thr_bits_mean=11014.9923, std=40078.8920, min=1.0000, max=344000.0000
 
 Mean layer attention for top-k simple words:
 k=10, n_words=10 attention plots saved.
