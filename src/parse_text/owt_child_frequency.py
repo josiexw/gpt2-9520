@@ -44,7 +44,7 @@ def get_word_frequencies(max_docs: int, word_set: set):
 
 def main():
     parser = argparse.ArgumentParser(description='Parse OWT for common children words.')
-    parser.add_argument('--max_docs', type=int, default=250000000)
+    parser.add_argument('--max_docs', type=int, default=10_000_000)
     parser.add_argument('--wordbank_path', type=str, required=True)
     parser.add_argument('--output_path', type=str, required=True)
     args = parser.parse_args()
