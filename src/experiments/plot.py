@@ -185,19 +185,13 @@ def compute_llm_aoa_steps(
         return aoa_log10
 
     step_arr = np.array(steps, dtype=float)
-    log_steps = np.full_like(step_arr, np.nan, dtype=float)
+    log_steps = np.log10(step_arr + 1.0)
     positive_mask = step_arr > 0
     log_steps[positive_mask] = np.log10(step_arr[positive_mask])
 
     for w in words:
         s = np.array(word_to_series[w], dtype=float)
-        base_mask = np.isfinite(s)
-        step_mask = np.isfinite(log_steps)
-        mask = base_mask & step_mask
-
-        if mask.sum() < 4:
-            continue
-
+        mask = np.isfinite(log_steps)
         x = log_steps[mask]
         y = s[mask]
         order = np.argsort(x)
@@ -212,8 +206,7 @@ def compute_llm_aoa_steps(
         if not np.isfinite(y_min) or not np.isfinite(y_max) or y_max == y_min:
             continue
 
-        baseline_w = y[0]
-        thr = 0.5 * (baseline_w + y_min)
+        thr = 0.5 * (baseline_bits + y_min)
 
         L0 = max(y_max - y_min, 1e-3)
         b0 = y_min
