@@ -22,6 +22,14 @@ def load_wordbank_aoa(csv_path: str) -> Dict[str, float]:
         aoa = math.nan
         for col in aoa_cols_sorted:
             try:
+                v = float(col)
+                v = float(row[col])
+            except (TypeError, ValueError):
+                try:
+                    v = float(row[col])
+                except (TypeError, ValueError):
+                    continue
+            try:
                 v = float(row[col])
             except (TypeError, ValueError):
                 continue
@@ -340,6 +348,7 @@ def main():
             plt.xlabel(f"{label_type_small or 'step'}")
             plt.ylabel("Mean layer attention")
             plt.title(f"Top {k} simple words: attention vs {label_type_small or 'step'}")
+            plt.gca().invert_yaxis()
             plt.legend()
             out_path = os.path.join(args.out_dir, f"avg_attention_top{k}.png")
             fig.savefig(out_path, bbox_inches="tight")
@@ -496,6 +505,99 @@ def main():
             fout.write(f"  Side-by-side plots saved for {n_plotted} words.\n")
         else:
             fout.write("  No words for child vs LLM per-word plots.\n")
+
+        fout.write("\nChild trajectories vs LLM attention (per word):\n")
+        if common_for_aoa:
+            max_words_side_by_side_att = 50
+            n_plotted_att = 0
+
+            def normalize_x_att(xs: np.ndarray) -> np.ndarray:
+                xs = np.array(xs, dtype=float)
+                if xs.size == 0:
+                    return xs
+                denom = xs[-1] - xs[0]
+                if denom <= 0:
+                    return np.zeros_like(xs)
+                return (xs - xs[0]) / denom
+
+            months_arr_att = np.array(months, dtype=float)
+            if months_arr_att.size > 1:
+                months_norm_att = (months_arr_att - months_arr_att.min()) / (months_arr_att.max() - months_arr_att.min())
+            else:
+                months_norm_att = np.zeros_like(months_arr_att)
+
+            for w in common_for_aoa:
+                if w not in word_to_curve:
+                    continue
+                child_curve = word_to_curve[w]
+                if not np.isfinite(child_curve).any():
+                    continue
+                a_small = np.array(small_act[w], dtype=float)
+                a_medium = np.array(medium_act[w], dtype=float)
+                if not (np.isfinite(a_small).any() or np.isfinite(a_medium).any()):
+                    continue
+
+                steps_small_arr = np.array(steps_small, dtype=float)
+                steps_medium_arr = np.array(steps_medium, dtype=float)
+
+                fig, axes = plt.subplots(1, 3, figsize=(12, 3))
+
+                if np.isfinite(a_small).any():
+                    axes[0].plot(steps_small_arr, a_small, label="gpt2-small")
+                if np.isfinite(a_medium).any():
+                    axes[0].plot(steps_medium_arr, a_medium, label="gpt2-medium")
+
+                axes[0].set_xlabel(label_type_small or "step")
+                axes[0].set_ylabel("Mean layer attention")
+                axes[0].set_title(f"{w} - LLM attention")
+                axes[0].invert_yaxis()
+                axes[0].legend()
+
+                axes[1].plot(months, child_curve, marker="o")
+                axes[1].axhline(0.5, linestyle="--", linewidth=1, color="cornflowerblue")
+                axes[1].set_xlabel("Age (months)")
+                axes[1].set_ylabel("Proportion producing")
+                axes[1].set_ylim(0.0, 1.0)
+                axes[1].set_title(f"{w} - children")
+
+                ax3 = axes[2]
+                ax3b = ax3.twinx()
+
+                if np.isfinite(a_small).any():
+                    x_small_norm = normalize_x_att(steps_small_arr)
+                    ax3.plot(x_small_norm, a_small, label="gpt2-small")
+                if np.isfinite(a_medium).any():
+                    x_medium_norm = normalize_x_att(steps_medium_arr)
+                    ax3.plot(x_medium_norm, a_medium, label="gpt2-medium")
+
+                child_mask = np.isfinite(child_curve)
+                if child_mask.any():
+                    ax3b.plot(months_norm_att[child_mask], child_curve[child_mask], marker="o", color="green", label="children")
+
+                ax3.set_xlim(0.0, 1.0)
+                ax3.set_xlabel("Normalized timeline")
+                ax3.set_ylabel("Mean layer attention")
+                ax3b.set_ylabel("Proportion producing")
+                ax3.set_title(f"{w} - normalized overlay (attention)")
+                ax3.invert_yaxis()
+
+                handles1, labels1 = ax3.get_legend_handles_labels()
+                handles2, labels2 = ax3b.get_legend_handles_labels()
+                if handles1 or handles2:
+                    ax3.legend(handles1 + handles2, labels1 + labels2, loc="best")
+
+                fig.tight_layout()
+                safe_w = re.sub(r"[^A-Za-z0-9]+", "_", w).strip("_")
+                out_path_word_att = os.path.join(args.out_dir, f"word_{safe_w}_child_vs_llm_attention.png")
+                fig.savefig(out_path_word_att, bbox_inches="tight")
+                plt.close(fig)
+                n_plotted_att += 1
+                if n_plotted_att >= max_words_side_by_side_att:
+                    break
+
+            fout.write(f"  Side-by-side attention plots saved for {n_plotted_att} words.\n")
+        else:
+            fout.write("  No words for child vs LLM attention per-word plots.\n")
 
         fout.write("\nSurprisal trajectories stratified by child AoA bins:\n")
         bins = [("early", 16, 20), ("mid", 21, 24), ("late", 25, 30)]

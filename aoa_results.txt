@@ -26,6 +26,9 @@ LLM AoA points used: 444
 Child trajectories vs LLM surprisal (per word):
   Side-by-side plots saved for 50 words.
 
+Child trajectories vs LLM attention (per word):
+  Side-by-side attention plots saved for 50 words.
+
 Surprisal trajectories stratified by child AoA bins:
   bin early (16-20): n_words=34
   bin mid (21-24): n_words=148
