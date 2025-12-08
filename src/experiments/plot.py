@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 
-def load_wordbank_aoa(csv_path: str) -> Dict[str, float]:
+def load_wordbank_aoa(csv_path: str):
     df = pd.read_csv(csv_path)
     aoa_cols = [c for c in df.columns if c.isdigit()]
     aoa_cols_sorted = sorted(aoa_cols, key=lambda x: int(x))
@@ -33,7 +33,7 @@ def load_wordbank_aoa(csv_path: str) -> Dict[str, float]:
     return word_to_aoa
 
 
-def load_wordbank_curves(csv_path: str) -> Tuple[List[int], Dict[str, np.ndarray]]:
+def load_wordbank_curves(csv_path: str):
     df = pd.read_csv(csv_path)
     aoa_cols = [c for c in df.columns if c.isdigit()]
     aoa_cols_sorted = sorted(aoa_cols, key=lambda x: int(x))
@@ -54,7 +54,7 @@ def load_wordbank_curves(csv_path: str) -> Tuple[List[int], Dict[str, np.ndarray
     return months, word_to_curve
 
 
-def parse_step_from_fname(fname: str) -> Tuple[int, int, str]:
+def parse_step_from_fname(fname: str):
     m_label = re.search(r"idx\d+_([A-Za-z]+)(\d+)\.pkl$", fname)
     if not m_label:
         raise ValueError(f"Cannot parse label from {fname}")
@@ -62,7 +62,7 @@ def parse_step_from_fname(fname: str) -> Tuple[int, int, str]:
     return step
 
 
-def load_results_dir(results_dir) -> Tuple[List[int], Dict[str, List[float]], Dict[str, List[float]]]:
+def load_results_dir(results_dir: str):
     entries = []
     for fname in os.listdir(results_dir):
         if not fname.endswith(".pkl"):
@@ -101,13 +101,13 @@ def load_results_dir(results_dir) -> Tuple[List[int], Dict[str, List[float]], Di
     return steps, word_to_surprisal, word_to_act
 
 
-def get_simple_ranking(word_aoa: Dict[str, float], available_words: Set[str], max_n: int) -> List[str]:
+def get_simple_ranking(word_aoa: Dict[str, float], available_words: set[str], max_n: int):
     items = [(w, aoa) for w, aoa in word_aoa.items() if w in available_words and not math.isnan(aoa)]
     items.sort(key=lambda x: (x[1], x[0]))
     return [w for w, _ in items[:max_n]]
 
 
-def compute_avg_series(word_to_series: Dict[str, List[float]], words: List[str]) -> np.ndarray:
+def compute_avg_series(word_to_series: Dict[str, List[float]], words: List[str]):
     if not words:
         return np.array([], dtype=float)
     arr = []
@@ -123,7 +123,7 @@ def compute_thresholds_per_word(
     baseline_bits: float,
     words: List[str],
     steps: List[int],
-) -> Dict[str, float]:
+):
     aoa_log10 = compute_llm_aoa_steps(
         word_to_series=word_to_series,
         steps=steps,
@@ -148,7 +148,7 @@ def compute_llm_aoa_steps(
     steps: List[int],
     baseline_bits: float,
     words: List[str],
-) -> Dict[str, float]:
+):
     aoa_log10: Dict[str, float] = {}
     if not words:
         return aoa_log10
@@ -245,7 +245,7 @@ def compute_llm_aoa_steps(
     return aoa_log10
 
 
-def normalize_x(xs: np.ndarray) -> np.ndarray:
+def normalize_x(xs: np.ndarray):
     xs = np.array(xs, dtype=float)
     if xs.size == 0:
         return xs
@@ -431,6 +431,7 @@ def main():
                     if arr.size > 0:
                         all_s_vals.extend(arr.tolist())
 
+            # Align LLM and child AoA
             min_surprisal = float(min(all_s_vals))
             max_surprisal = float(max(all_s_vals))
             data_range = max_surprisal - min_surprisal

@@ -90,7 +90,7 @@ def collect_contexts_from_texts(
     simple_words: set,
     max_context: int = X,
     window_size: int = 10,
-) -> Dict[str, List[str]]:
+):
     
     contexts = defaultdict(set)
     completed_words = set()
@@ -121,13 +121,11 @@ def main():
     )
     parser.add_argument("--X", type=int, default=X, help="Number of contexts to collect per word.")
     parser.add_argument("--token_limit", type=int, default=TOKEN_LIMIT, help="Approximate total number of word tokens to sample from Cosmopedia.")
-    parser.add_argument("--subsets", type=str, default=",".join(COSMOPEDIA_SUBSETS), help="Comma-separated list of Cosmopedia subsets to sample from.")
     parser.add_argument("--wordbank_path", type=str, default="data/wordbank_item_data.csv", help="Path to Wordbank item data CSV.")
     parser.add_argument("--output_path", type=str, required=True, help="Path to save the collected contexts as a pickle file.")
     args = parser.parse_args()
 
-    subsets = [s.strip() for s in args.subsets.split(",") if s.strip()]
-    texts = sample_cosmopedia_texts(token_limit=args.token_limit, subsets=subsets)
+    texts = sample_cosmopedia_texts(token_limit=args.token_limit, subsets=COSMOPEDIA_SUBSETS)
     simple_words = find_simple_words(texts, wordbank_path=args.wordbank_path)
     print(f"Found {len(simple_words)} simple words.")
     contexts = collect_contexts_from_texts(texts, simple_words, max_context=args.X)
