@@ -93,6 +93,7 @@ def collect_contexts_from_texts(
 ) -> Dict[str, List[str]]:
     
     contexts = defaultdict(set)
+    completed_words = set()
 
     for doc in tqdm(nlp.pipe(texts, batch_size=32), total=len(texts), desc="Collecting contexts"):
         for sent in doc.sents:
@@ -104,6 +105,12 @@ def collect_contexts_from_texts(
 
                     if prefix:
                         contexts[w].add(prefix)
+
+                    if len(contexts[w]) >= max_context:
+                        completed_words.add(w)
+                        
+                if len(completed_words) == len(simple_words):
+                    break
 
     return {w: list(contexts[w]) for w in simple_words if len(contexts[w]) >= max_context}
 
