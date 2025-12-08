@@ -300,7 +300,6 @@ def main():
     parser.add_argument("--small_dir", type=str, default="stanford-gpt2-small-a_results")
     parser.add_argument("--medium_dir", type=str, default="stanford-gpt2-medium-a_results")
     parser.add_argument("--wordbank_csv", type=str, default="data/wordbank_item_data.csv")
-    parser.add_argument("--owt_words_txt", type=str, default="data/owt_frequent.txt")
     parser.add_argument("--out_dir", type=str, default="figs")
     parser.add_argument("--out_txt", type=str, default="aoa_results.txt")
     parser.add_argument("--max_simple", type=int, default=600)
@@ -312,7 +311,6 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     word_aoa = load_wordbank_aoa(args.wordbank_csv)
-    owt_counts = load_owt_counts(args.owt_words_txt)
     months, word_to_curve = load_wordbank_curves(args.wordbank_csv)
 
     steps_small, small_surpr, small_act, label_type_small = load_results_dir(args.small_dir)
@@ -419,7 +417,7 @@ def main():
 
         fout.write("\nChild trajectories vs LLM surprisal (per word):\n")
         if common_for_aoa:
-            max_words_side_by_side = 100
+            max_words_side_by_side = 10
             n_plotted = 0
             margin_idx = 2
 
@@ -552,7 +550,7 @@ def main():
 
                 fig.tight_layout()
                 safe_w = re.sub(r"[^A-Za-z0-9]+", "_", w).strip("_")
-                out_path_word = os.path.join(args.out_dir, f"word_{safe_w}_child_vs_llm.png")
+                out_path_word = os.path.join(args.out_dir, f"word_{safe_w}_child_vs_llm_surprisal.png")
                 fig.savefig(out_path_word, bbox_inches="tight")
                 plt.close(fig)
                 n_plotted += 1
@@ -564,7 +562,7 @@ def main():
 
         fout.write("\nChild trajectories vs LLM attention (per word):\n")
         if common_for_aoa:
-            max_words_side_by_side_att = 50
+            max_words_side_by_side_att = 10
             n_plotted_att = 0
 
             def normalize_x_att(xs: np.ndarray) -> np.ndarray:
