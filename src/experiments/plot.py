@@ -407,7 +407,7 @@ def main():
             axes[1].set_xlabel("Age (months)")
             axes[1].set_ylabel("Proportion producing")
             axes[1].set_ylim(0.0, 1.0)
-            axes[1].set_title(f"{w} - children")
+            axes[1].set_title(f"{w} - Children")
 
             ax3 = axes[2]
             ax3b = ax3.twinx()
@@ -447,7 +447,7 @@ def main():
             ax3.set_ylabel("Surprisal (bits)")
             ax3b.set_ylabel("Proportion producing")
             ax3b.set_ylim(0.0, 1.0)
-            ax3.set_title(f"{w} - normalized overlay")
+            ax3.set_title(f"{w} - Normalized aligned overlay")
 
             handles1, labels1 = ax3.get_legend_handles_labels()
             handles2, labels2 = ax3b.get_legend_handles_labels()
@@ -500,7 +500,7 @@ def main():
             axes[1].set_xlabel("Age (months)")
             axes[1].set_ylabel("Proportion producing")
             axes[1].set_ylim(0.0, 1.0)
-            axes[1].set_title(f"{w} - children")
+            axes[1].set_title(f"{w} - Children")
 
             ax3 = axes[2]
             ax3b = ax3.twinx()
@@ -521,7 +521,7 @@ def main():
             ax3.set_ylabel("Mean layer attention")
             ax3b.set_ylabel("Proportion producing")
             ax3b.set_ylim(0.0, 1.0)
-            ax3.set_title(f"{w} - normalized overlay (attention)")
+            ax3.set_title(f"{w} - Normalized aligned overlay")
             ax3.invert_yaxis()
 
             handles1, labels1 = ax3.get_legend_handles_labels()
