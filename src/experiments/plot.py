@@ -335,7 +335,7 @@ def main():
     if simple_ranking:
         max_words_side_by_side = 10
         n_plotted = 0
-        margin_idx = 2
+        margin_idx = 3
         months_arr = np.array(months, dtype=float)
         if months_arr.size > 1:
             months_norm = (months_arr - months_arr.min()) / (months_arr.max() - months_arr.min())
@@ -360,7 +360,7 @@ def main():
             def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
                 s = np.array(s, dtype=float)
                 if not np.isfinite(s).any():
-                    return None, None, None, None
+                    return None, None, None
                 s_min = float(np.nanmin(s))
                 thr = 0.5 * (baseline_bits + s_min)
                 idx_cross = None
