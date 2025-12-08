@@ -303,7 +303,7 @@ def main():
     parser.add_argument("--owt_words_txt", type=str, default="data/owt_frequent.txt")
     parser.add_argument("--out_dir", type=str, default="figs")
     parser.add_argument("--out_txt", type=str, default="aoa_results.txt")
-    parser.add_argument("--max_simple", type=int, default=500)
+    parser.add_argument("--max_simple", type=int, default=600)
     parser.add_argument("--ks", type=str, default="10,100,500")
     parser.add_argument("--baseline_bits", type=float, default=15.6)
     parser.add_argument("--attention_steps", type=str, default="200,20000,200000,392000")
@@ -394,7 +394,7 @@ def main():
 
         aoa_small = compute_llm_aoa_steps(small_surpr, steps_small, args.baseline_bits, simple_ranking)
         aoa_medium = compute_llm_aoa_steps(medium_surpr, steps_medium, args.baseline_bits, simple_ranking)
-        common_for_aoa = [w for w in simple_ranking if w in aoa_small and w in aoa_medium]
+        common_for_aoa = [w for w in simple_ranking]
 
         fout.write("\nLLM AoA vs simplicity rank:\n")
         if common_for_aoa:
@@ -419,7 +419,7 @@ def main():
 
         fout.write("\nChild trajectories vs LLM surprisal (per word):\n")
         if common_for_aoa:
-            max_words_side_by_side = 50
+            max_words_side_by_side = 100
             n_plotted = 0
             margin_idx = 2
 
@@ -518,12 +518,32 @@ def main():
                 if child_mask.any():
                     ax3b.plot(months_norm[child_mask], child_curve[child_mask], marker="o", color="green", label="children")
 
+                all_s_vals = []
+                for arr in (s_small_crop, s_medium_crop):
+                    if arr is not None:
+                        arr = np.asarray(arr, dtype=float)
+                        arr = arr[np.isfinite(arr)]
+                        if arr.size > 0:
+                            all_s_vals.extend(arr.tolist())
+
+                min_surprisal = float(min(all_s_vals))
+                max_surprisal = float(max(all_s_vals))
+                data_range = max_surprisal - min_surprisal
+                if data_range <= 0:
+                    data_range = 1.0
+                buffer = 0.1 * data_range
+                half_total = 0.5 * data_range + buffer
+                y_max = thr_small + half_total
+                y_min = thr_small - half_total
+                ax3.set_ylim(y_max, y_min)
+
                 ax3.set_xlim(0.0, 1.0)
                 ax3.set_xlabel("Normalized timeline")
                 ax3.set_ylabel("Surprisal (bits)")
                 ax3b.set_ylabel("Proportion producing")
+                ax3b.set_ylim(0, 1)
                 ax3.set_title(f"{w} - normalized overlay")
-                ax3.invert_yaxis()
+                # ax3.invert_yaxis()
 
                 handles1, labels1 = ax3.get_legend_handles_labels()
                 handles2, labels2 = ax3b.get_legend_handles_labels()
