@@ -120,31 +120,17 @@ class Experiment:
         return output_dict
 
 
-def resolve_model_name(model_size: str) -> str:
-    if model_size == "small":
-        return "stanford-gpt2-small-a"
-    elif model_size == "medium":
-        return "stanford-gpt2-medium-a"
-    else:
-        raise ValueError(f"Unknown model_size: {model_size}")
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Compute word surprisal and avg attention per layer across GPT-2 checkpoints."
     )
-    parser.add_argument("--model_size", type=str, choices=["small", "medium"], required=True)
+    parser.add_argument("--model_name", type=str, choices=["stanford-gpt2-small-a", "stanford-gpt2-medium-a"], required=True)
     parser.add_argument("--contexts_pkl", type=str, required=True)
     parser.add_argument("--out_dir", type=str, required=True)
-    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--dtype", type=str, default="float16", choices=["float32", "float16", "bfloat16"])
-    parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--checkpoint_stride", type=int, default=12)
-    parser.add_argument("--checkpoint_start", type=int, default=0)
-    parser.add_argument("--checkpoint_end", type=int, default=None)
     args = parser.parse_args()
-
-    base_model_name = resolve_model_name(args.model_size)
 
     os.makedirs(args.out_dir, exist_ok=True)
 
@@ -154,17 +140,11 @@ def main():
         "bfloat16": torch.bfloat16,
     }
     torch_dtype = dtype_map[args.dtype]
-
-    if args.device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    else:
-        device = args.device
-
-    labels, label_type = get_checkpoint_labels(base_model_name)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    labels, label_type = get_checkpoint_labels(args.model_name)
     num_ckpts = len(labels)
-    end = num_ckpts if args.checkpoint_end is None else min(args.checkpoint_end, num_ckpts)
 
-    print(f"Model: {base_model_name}")
+    print(f"Model: {args.model_name}")
     print(f"Checkpoint label type: {label_type}")
     print(f"Total checkpoints in table: {num_ckpts}")
     print(f"Using stride {args.checkpoint_stride}")
@@ -172,7 +152,7 @@ def main():
     with open(args.contexts_pkl, "rb") as f:
         contexts = pickle.load(f)
 
-    for idx in range(0, end, args.checkpoint_stride):
+    for idx in range(0, num_ckpts, args.checkpoint_stride):
         label = labels[idx]
         out_pkl = os.path.join(
             args.out_dir,
@@ -183,11 +163,11 @@ def main():
             print(f"[{idx}] Skipping (results already exist): {out_pkl}")
             continue
 
-        print(f"[{idx}] Loading model {base_model_name} checkpoint_index={idx} (label={label_type} {label})")
+        print(f"[{idx}] Loading model {args.model_name} checkpoint_index={idx} (label={label_type} {label})")
 
         try:
             model = HookedTransformer.from_pretrained_no_processing(
-                base_model_name,
+                args.model_name,
                 checkpoint_index=idx,
                 device=device,
                 dtype=torch_dtype,
@@ -219,15 +199,11 @@ def main():
 
         print(f"[{idx}] Saved results to: {out_pkl}")
 
-    print("Done.")
-
 if __name__ == "__main__":
     main()
 
-# python src/analyze_checkpts/mult_ckpt.py \
-#   --model_size small \
+# python src/analyze_ckpt/mult_ckpt.py \
+#   --model_name stanford-gpt2-small-a \
 #   --contexts_pkl data/contexts_cosmopedia.pkl \
 #   --out_dir stanford-gpt2-small-a_results \
-#   --batch_size 256 \
-#   --checkpoint_stride 12 \
-#   --dtype float16
+#   --batch_size 256
