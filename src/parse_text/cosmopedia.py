@@ -82,8 +82,7 @@ def get_corpus_vocab(texts: List[str]) -> set:
 def find_simple_words(texts: List[str], wordbank_path: str = "data/wordbank_item_data.csv") -> set:
     allowed_words = load_wordbank_words(wordbank_path)
     corpus_vocab = get_corpus_vocab(texts)
-    simple_words = [word for word in corpus_vocab if word in allowed_words]
-    return set(simple_words)
+    return {word for word in corpus_vocab if word in allowed_words}
 
 
 def collect_contexts_from_texts(
@@ -92,11 +91,9 @@ def collect_contexts_from_texts(
     max_context: int = X,
     window_size: int = 10,
 ) -> Dict[str, List[str]]:
+    
     contexts = defaultdict(set)
-    completed_words = set()
 
-    def done() -> bool:
-        return len(completed_words) == len(simple_words)
     for doc in tqdm(nlp.pipe(texts, batch_size=32), total=len(texts), desc="Collecting contexts"):
         for sent in doc.sents:
             words = [tok.text.lower() for tok in sent if tok.is_alpha]
@@ -108,10 +105,6 @@ def collect_contexts_from_texts(
                     if prefix:
                         contexts[w].add(prefix)
 
-                    if len(contexts[w]) >= max_context:
-                        completed_words.add(w)
-        if done():
-            break
     return {w: list(contexts[w]) for w in simple_words if len(contexts[w]) >= max_context}
 
 
