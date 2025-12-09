@@ -1,10 +1,54 @@
 import os
 import argparse
-from typing import Dict
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
 from plot import *
+
+def compute_child_interp_aoa(wordbank_csv: str):
+    months, word_to_curve = load_wordbank_curves(wordbank_csv)
+    months_arr = np.array(months, dtype=float)
+
+    child_interp_aoa = {}
+    for w, curve in word_to_curve.items():
+        curve_arr = np.array(curve, dtype=float)
+        if not np.isfinite(curve_arr).any():
+            continue
+
+        mask = np.isfinite(curve_arr)
+        m = months_arr[mask]
+        y = curve_arr[mask]
+        if m.size < 2:
+            continue
+
+        idx_cross = None
+        for j in range(1, y.size):
+            y_prev = y[j - 1]
+            y_curr = y[j]
+            if not (np.isfinite(y_prev) and np.isfinite(y_curr)):
+                continue
+            if (y_prev - 0.5) * (y_curr - 0.5) <= 0:
+                idx_cross = j
+                break
+
+        if idx_cross is None:
+            continue
+
+        m1, m2 = m[idx_cross - 1], m[idx_cross]
+        y1, y2 = y[idx_cross - 1], y[idx_cross]
+        if not (np.isfinite(y1) and np.isfinite(y2)) or m2 == m1:
+            continue
+
+        if y2 == y1:
+            aoa_month = m2
+        else:
+            aoa_month = m1 + (0.5 - y1) * (m2 - m1) / (y2 - y1)
+
+        if np.isfinite(aoa_month) and aoa_month > 0:
+            child_interp_aoa[w] = float(aoa_month)
+
+    return child_interp_aoa
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -19,52 +63,16 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     word_aoa = load_wordbank_aoa(args.wordbank_csv)
-    months, word_to_curve = load_wordbank_curves(args.wordbank_csv)
 
     steps_small, small_surpr, _ = load_results_dir(args.small_dir)
     steps_medium, medium_surpr, _ = load_results_dir(args.medium_dir)
 
     words_small = set(small_surpr.keys())
     words_medium = set(medium_surpr.keys())
+
     available_words = words_small & words_medium
-
     simple_ranking = get_simple_ranking(word_aoa, available_words, args.max_simple)
-
-    months_arr = np.array(months, dtype=float)
-    child_interp_aoa: Dict[str, float] = {}
-    for w in simple_ranking:
-        if w not in word_to_curve:
-            continue
-        curve = np.array(word_to_curve[w], dtype=float)
-        if not np.isfinite(curve).any():
-            continue
-        mask = np.isfinite(curve)
-        m = months_arr[mask]
-        y = curve[mask]
-        if m.size < 2:
-            continue
-        idx_cross = None
-        for j in range(1, y.size):
-            y_prev = y[j - 1]
-            y_curr = y[j]
-            if not (np.isfinite(y_prev) and np.isfinite(y_curr)):
-                continue
-            if (y_prev - 0.5) * (y_curr - 0.5) <= 0:
-                idx_cross = j
-                break
-        if idx_cross is None:
-            continue
-        m1, m2 = m[idx_cross - 1], m[idx_cross]
-        y1, y2 = y[idx_cross - 1], y[idx_cross]
-        if not (np.isfinite(y1) and np.isfinite(y2)) or m2 == m1:
-            continue
-        if y2 == y1:
-            aoa_month = m2
-        else:
-            aoa_month = m1 + (0.5 - y1) * (m2 - m1) / (y2 - y1)
-        if np.isfinite(aoa_month) and aoa_month > 0:
-            child_interp_aoa[w] = float(aoa_month)
-
+    child_interp_aoa = compute_child_interp_aoa(args.wordbank_csv)
     words_for_aoa = [w for w in simple_ranking if w in child_interp_aoa]
 
     aoa_small_log = compute_llm_aoa_steps(
