@@ -110,8 +110,6 @@ def main():
         return
 
     df = pd.DataFrame(rows)
-    df.to_csv(args.out_csv, index=False)
-
     df_norm = df.copy()
     param_cols = [
         "child_L", "child_k", "child_x0", "child_b",
@@ -169,8 +167,12 @@ def main():
     summary_df = pd.DataFrame(summary_rows)
     print(summary_df.to_string(index=False))
 
-    summary_out = args.out_csv.replace(".csv", f"_{args.corr_type}_summary.csv")
-    summary_df.to_csv(summary_out, index=False)
+    if "small" in args.model_dir:
+        scale = "small"
+    else:
+        scale = "medium"
+
+    summary_df.to_csv(f"results/{scale}_{args.corr_type}_params.csv", index=False)
 
 
 if __name__ == "__main__":

@@ -130,6 +130,11 @@ def main():
             r_ca, p_ca = spearmanr(y_child_norm, y_a_norm)
             r_sa, p_sa = spearmanr(y_s_norm, y_a_norm)
 
+        if "small" in args.model_dir:
+            scale = "small"
+        else:
+            scale = "medium"
+
         print(f"{w}\t{r_cs:.4f}\t{p_cs:.4e}\t{r_ca:.4f}\t{p_ca:.4e}\t{r_sa:.4f}\t{p_sa:.4e}")
 
         rows.append(
@@ -159,7 +164,7 @@ def main():
 
     if rows:
         df = pd.DataFrame(rows)
-        df.to_csv(f"{args.corr_type}_results.csv", index=False)
+        df.to_csv(f"results/{scale}_{args.corr_type}_dist.csv", index=False)
 
 if __name__ == "__main__":
     main()
