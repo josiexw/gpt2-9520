@@ -52,7 +52,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_dir", type=str, default="stanford-gpt2-small-a_results")
     parser.add_argument("--wordbank_csv", type=str, default="data/wordbank_item_data.csv")
-    parser.add_argument("--max_simple", type=int, default=500)
+    parser.add_argument("--max_simple", type=int, default=600)
     parser.add_argument("--corr_type", type=str, choices=["pearson", "spearman"], default="pearson")
     args = parser.parse_args()
 

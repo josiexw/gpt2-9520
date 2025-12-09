@@ -2,6 +2,7 @@ import os
 import re
 import argparse
 import math
+import statistics
 import pickle
 from typing import Dict, List, Tuple, Set
 import numpy as np
@@ -10,13 +11,20 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 
+def normalize_cdi_label(w: str) -> str:
+    w = w.lower().strip()
+    w = re.sub(r"\s*\(.*?\)\s*", "", w)
+    w = re.sub(r"\s+", " ", w)
+    return w
+
+
 def load_wordbank_aoa(csv_path: str):
     df = pd.read_csv(csv_path)
     aoa_cols = [c for c in df.columns if c.isdigit()]
     aoa_cols_sorted = sorted(aoa_cols, key=lambda x: int(x))
     word_to_aoa = {}
     for _, row in df.iterrows():
-        word = str(row["item_definition"]).strip().lower()
+        word = normalize_cdi_label(str(row["item_definition"]))
         if not word:
             continue
         aoa = math.nan
@@ -29,7 +37,10 @@ def load_wordbank_aoa(csv_path: str):
                 aoa = float(col)
                 break
         if not math.isnan(aoa):
-            word_to_aoa[word] = aoa
+            if word in word_to_aoa:  # Use average AoA for repeated words
+                word_to_aoa[word] = statistics.mean([word_to_aoa[word], aoa])
+            else:
+                word_to_aoa[word] = aoa
     return word_to_aoa
 
 
@@ -40,7 +51,7 @@ def load_wordbank_curves(csv_path: str):
     months = [int(c) for c in aoa_cols_sorted]
     word_to_curve: Dict[str, np.ndarray] = {}
     for _, row in df.iterrows():
-        word = str(row["item_definition"]).strip().lower()
+        word = normalize_cdi_label(str(row["item_definition"]))
         if not word:
             continue
         vals = []
@@ -50,7 +61,13 @@ def load_wordbank_curves(csv_path: str):
                 vals.append(float(v))
             except (TypeError, ValueError):
                 vals.append(math.nan)
-        word_to_curve[word] = np.array(vals, dtype=float)
+        vals_arr = np.array(vals, dtype=float)
+        if word in word_to_curve:  # Average curve for repeated words
+            prev = word_to_curve[word]
+            stacked = np.vstack([prev, vals_arr])
+            word_to_curve[word] = np.nanmean(stacked, axis=0)
+        else:
+            word_to_curve[word] = vals_arr
     return months, word_to_curve
 
 
@@ -74,11 +91,12 @@ def load_results_dir(results_dir: str):
         word_surprisal = {}
         word_act = {}
         for w, info in data.items():
-            word_surprisal[w] = float(info["avg_surprisal"])
+            w_norm = normalize_cdi_label(w)
+            word_surprisal[w_norm] = float(info["avg_surprisal"])
             layer_attn = info.get("avg_layer_attn", None)
             if layer_attn is not None:
                 layer_arr = np.array(layer_attn, dtype=float)
-                word_act[w] = float(np.nanmean(layer_arr))
+                word_act[w_norm] = float(np.nanmean(layer_arr))
         entries.append((step, word_surprisal, word_act))
     entries.sort(key=lambda x: x[0])
     steps = [e[0] for e in entries]

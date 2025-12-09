@@ -1,6 +1,5 @@
 import os
 import argparse
-import math
 from typing import Dict
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,7 +12,7 @@ def main():
     parser.add_argument("--medium_dir", type=str, default="stanford-gpt2-medium-a_results")
     parser.add_argument("--wordbank_csv", type=str, default="data/wordbank_item_data.csv")
     parser.add_argument("--out_dir", type=str, default="figs")
-    parser.add_argument("--max_simple", type=int, default=500)
+    parser.add_argument("--max_simple", type=int, default=600)
     parser.add_argument("--baseline_bits", type=float, default=15.6)
     args = parser.parse_args()
 
