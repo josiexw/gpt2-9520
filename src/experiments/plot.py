@@ -477,27 +477,6 @@ def main():
             if child_mask.any():
                 ax3b.plot(months_norm[child_mask], child_curve[child_mask], marker="o", color="green", label="children")
 
-            # # Align AoA threshold
-            # all_s_vals = []
-            # for arr in (s_small, s_medium):
-            #     if arr is not None:
-            #         arr = np.asarray(arr, dtype=float)
-            #         arr = arr[np.isfinite(arr)]
-            #         if arr.size > 0:
-            #             all_s_vals.extend(arr.tolist())
-
-            # if all_s_vals:
-            #     min_surprisal = float(min(all_s_vals))
-            #     max_surprisal = float(max(all_s_vals))
-            #     data_range = max_surprisal - min_surprisal
-            #     if data_range <= 0:
-            #         data_range = 1.0
-            #     buffer = 0.1 * data_range
-            #     half_total = 0.5 * data_range + buffer
-            #     y_max = thr_small + half_total
-            #     y_min = thr_small - half_total
-            #     ax3.set_ylim(y_max, y_min)
-
             # Normalize surprisal curves so threshold is at 0.5
             if thr_small is not None and np.isfinite(s_small).any():
                 s_small_min = np.nanmin(s_small)
@@ -583,16 +562,19 @@ def main():
             mse_small_child = None
             mse_medium_child = None
             mse_small_medium = None
-            
+
+            # Invert surprisal so it increases
             if s_small_interp is not None and child_interp is not None:
-                mse_small_child = np.mean((s_small_interp - child_interp) ** 2)
-            
+                s_small_interp_inverted = 1.0 - s_small_interp
+                mse_small_child = np.mean((s_small_interp_inverted - child_interp) ** 2)
+
             if s_medium_interp is not None and child_interp is not None:
-                mse_medium_child = np.mean((s_medium_interp - child_interp) ** 2)
-            
+                s_medium_interp_inverted = 1.0 - s_medium_interp
+                mse_medium_child = np.mean((s_medium_interp_inverted - child_interp) ** 2)
+
             if s_small_interp is not None and s_medium_interp is not None:
                 mse_small_medium = np.mean((s_small_interp - s_medium_interp) ** 2)
-            
+
             mse_results.append({
                 'word': w,
                 'mse_small_child': mse_small_child,
