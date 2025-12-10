@@ -10,6 +10,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
+plt.rcParams.update(
+    {
+        "font.size": 16,
+        "axes.titlesize": 20,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "legend.fontsize": 14,
+    }
+)
+
 
 def normalize_cdi_label(w: str) -> str:
     w = w.lower().strip()
@@ -37,7 +48,7 @@ def load_wordbank_aoa(csv_path: str):
                 aoa = float(col)
                 break
         if not math.isnan(aoa):
-            if word in word_to_aoa:  # Use average AoA for repeated words
+            if word in word_to_aoa:
                 word_to_aoa[word] = statistics.mean([word_to_aoa[word], aoa])
             else:
                 word_to_aoa[word] = aoa
@@ -62,7 +73,7 @@ def load_wordbank_curves(csv_path: str):
             except (TypeError, ValueError):
                 vals.append(math.nan)
         vals_arr = np.array(vals, dtype=float)
-        if word in word_to_curve:  # Average curve for repeated words
+        if word in word_to_curve:
             prev = word_to_curve[word]
             stacked = np.vstack([prev, vals_arr])
             word_to_curve[word] = np.nanmean(stacked, axis=0)
@@ -186,7 +197,6 @@ def compute_llm_aoa_steps(
         if not np.isfinite(y_min) or not np.isfinite(y_max) or y_max == y_min:
             continue
 
-        # AoA threshold
         thr = 0.5 * (baseline_bits + y_min)
 
         L0 = max(y_max - y_min, 1e-3)
@@ -240,7 +250,6 @@ def compute_llm_aoa_steps(
 
             x_star = 0.5 * (lo_x + hi_x)
 
-        # Fallback: linear scan
         except Exception:
             idx_val = None
 
@@ -271,6 +280,25 @@ def normalize_x(xs: np.ndarray):
     if denom <= 0:
         return np.zeros_like(xs)
     return (xs - xs[0]) / denom
+
+
+def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
+    s = np.array(s, dtype=float)
+    if not np.isfinite(s).any():
+        return None, None, None
+    s_min = float(np.nanmin(s))
+    thr = 0.5 * (baseline_bits + s_min)
+    idx_cross = None
+    for j, v in enumerate(s):
+        if np.isfinite(v) and v <= thr:
+            idx_cross = j
+            break
+    if idx_cross is None:
+        idx_cross = len(s) - 1
+    end_idx = min(idx_cross + margin_idx, len(s) - 1)
+    s_crop = s[: end_idx + 1]
+    steps_crop = steps_arr[: end_idx + 1]
+    return s_crop, steps_crop, thr
 
 
 def main():
@@ -305,7 +333,7 @@ def main():
         avg_small = compute_avg_series(small_surpr, words_k)
         avg_medium = compute_avg_series(medium_surpr, words_k)
 
-        def thr_mean(d: Dict[str, float]) -> Tuple[float, float, float, float]:
+        def thr_mean(d: Dict[str, float]) -> float:
             if not d:
                 return math.nan
             vals = np.array(list(d.values()), dtype=float)
@@ -343,7 +371,7 @@ def main():
         plt.plot(steps_medium, avg_medium_act, label="gpt2-medium")
         plt.xlabel("Step")
         plt.ylabel("Mean layer attention")
-        plt.title(f"Top {k} simple words: attention vs {'Step'}")
+        plt.title(f"Top {k} simple words: attention vs Step")
         plt.legend()
         out_path = os.path.join(args.out_dir, f"avg_attention_top{k}.png")
         fig.savefig(out_path, bbox_inches="tight")
@@ -360,7 +388,6 @@ def main():
         else:
             months_norm = np.zeros_like(months_arr)
 
-
         for w in simple_ranking:
             if w not in word_to_curve:
                 continue
@@ -374,24 +401,6 @@ def main():
 
             steps_small_arr = np.array(steps_small, dtype=float)
             steps_medium_arr = np.array(steps_medium, dtype=float)
-
-            def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
-                s = np.array(s, dtype=float)
-                if not np.isfinite(s).any():
-                    return None, None, None
-                s_min = float(np.nanmin(s))
-                thr = 0.5 * (baseline_bits + s_min)
-                idx_cross = None
-                for j, v in enumerate(s):
-                    if np.isfinite(v) and v <= thr:
-                        idx_cross = j
-                        break
-                if idx_cross is None:
-                    idx_cross = len(s) - 1
-                end_idx = min(idx_cross + margin_idx, len(s) - 1)
-                s_crop = s[:end_idx + 1]
-                steps_crop = steps_arr[:end_idx + 1]
-                return s_crop, steps_crop, thr
 
             s_small_crop, steps_small_crop, thr_small = crop_with_threshold(
                 s_small, steps_small_arr, args.baseline_bits, margin_idx
@@ -449,17 +458,17 @@ def main():
                     if arr.size > 0:
                         all_s_vals.extend(arr.tolist())
 
-            # Align LLM and child AoA
-            min_surprisal = float(min(all_s_vals))
-            max_surprisal = float(max(all_s_vals))
-            data_range = max_surprisal - min_surprisal
-            if data_range <= 0:
-                data_range = 1.0
-            buffer = 0.1 * data_range
-            half_total = 0.5 * data_range + buffer
-            y_max = thr_small + half_total
-            y_min = thr_small - half_total
-            ax3.set_ylim(y_max, y_min)
+            if all_s_vals:
+                min_surprisal = float(min(all_s_vals))
+                max_surprisal = float(max(all_s_vals))
+                data_range = max_surprisal - min_surprisal
+                if data_range <= 0:
+                    data_range = 1.0
+                buffer = 0.1 * data_range
+                half_total = 0.5 * data_range + buffer
+                y_max = thr_small + half_total
+                y_min = thr_small - half_total
+                ax3.set_ylim(y_max, y_min)
 
             ax3.set_xlim(0.0, 1.0)
             ax3.set_xlabel("Normalized timeline")
@@ -486,6 +495,12 @@ def main():
     if simple_ranking:
         max_words_side_by_side_att = 10
         n_plotted_att = 0
+
+        months_arr = np.array(months, dtype=float)
+        if months_arr.size > 1:
+            months_norm = (months_arr - months_arr.min()) / (months_arr.max() - months_arr.min())
+        else:
+            months_norm = np.zeros_like(months_arr)
 
         for w in simple_ranking:
             if w not in word_to_curve:
