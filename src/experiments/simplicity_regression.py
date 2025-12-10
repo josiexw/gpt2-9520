@@ -127,8 +127,12 @@ def main():
         y_arr = np.array(y_vals, dtype=float)
         if x_arr.size < 2:
             continue
-        r, _ = pearsonr(x_arr, y_arr)
+        r, pval = pearsonr(x_arr, y_arr)
         r2 = r**2
+        n = len(x_vals)
+        p = 1
+        adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
+        
         coeffs = np.polyfit(x_arr, y_arr, 1)
         x_line = np.linspace(x_arr.min(), x_arr.max(), 100)
         y_line = coeffs[0] * x_line + coeffs[1]
@@ -136,17 +140,17 @@ def main():
         ax.scatter(x_arr, y_arr, alpha=0.3)
         ax.plot(x_line, y_line)
         ax.set_xlabel("Child AoA (months)")
-        ax.set_ylabel("log LLM AoA (steps)")
+        ax.set_ylabel("LLM AoA (steps, log10)")
         ax.set_title(f"Child vs LLM AoA ({model_name})")
         ax.tick_params(axis="both", labelsize=14)
         ax.text(
             0.05,
             0.95,
-            f"r = {r:.3f}, R$^2$ = {r2:.3f}, n = {x_arr.size}",
+            f"r = {r:.3f}, p = {pval:.3f}, R$^2$ = {adj_r2:.3f}",
             transform=ax.transAxes,
             va="top",
             ha="left",
-            fontsize=16,
+            fontsize=16
         )
         plotted += 1
 
