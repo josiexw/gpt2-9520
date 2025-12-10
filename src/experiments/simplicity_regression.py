@@ -15,50 +15,6 @@ plt.rcParams.update(
     }
 )
 
-def compute_child_interp_aoa(wordbank_csv: str):
-    months, word_to_curve = load_wordbank_curves(wordbank_csv)
-    months_arr = np.array(months, dtype=float)
-
-    child_interp_aoa = {}
-    for w, curve in word_to_curve.items():
-        curve_arr = np.array(curve, dtype=float)
-        if not np.isfinite(curve_arr).any():
-            continue
-
-        mask = np.isfinite(curve_arr)
-        m = months_arr[mask]
-        y = curve_arr[mask]
-        if m.size < 2:
-            continue
-
-        idx_cross = None
-        for j in range(1, y.size):
-            y_prev = y[j - 1]
-            y_curr = y[j]
-            if not (np.isfinite(y_prev) and np.isfinite(y_curr)):
-                continue
-            if (y_prev - 0.5) * (y_curr - 0.5) <= 0:
-                idx_cross = j
-                break
-
-        if idx_cross is None:
-            continue
-
-        m1, m2 = m[idx_cross - 1], m[idx_cross]
-        y1, y2 = y[idx_cross - 1], y[idx_cross]
-        if not (np.isfinite(y1) and np.isfinite(y2)) or m2 == m1:
-            continue
-
-        if y2 == y1:
-            aoa_month = m2
-        else:
-            aoa_month = m1 + (0.5 - y1) * (m2 - m1) / (y2 - y1)
-
-        if np.isfinite(aoa_month) and aoa_month > 0:
-            child_interp_aoa[w] = float(aoa_month)
-
-    return child_interp_aoa
-
 
 def main():
     parser = argparse.ArgumentParser()

@@ -4,22 +4,11 @@ import argparse
 import math
 import statistics
 import pickle
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Set
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-
-plt.rcParams.update(
-    {
-        "font.size": 16,
-        "axes.titlesize": 20,
-        "axes.labelsize": 18,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "legend.fontsize": 14,
-    }
-)
 
 
 def normalize_cdi_label(w: str) -> str:
@@ -282,10 +271,87 @@ def normalize_x(xs: np.ndarray):
     return (xs - xs[0]) / denom
 
 
+def compute_child_interp_aoa(wordbank_csv: str):
+    months, word_to_curve = load_wordbank_curves(wordbank_csv)
+    months_arr = np.array(months, dtype=float)
+
+    child_interp_aoa = {}
+    for w, curve in word_to_curve.items():
+        curve_arr = np.array(curve, dtype=float)
+        if not np.isfinite(curve_arr).any():
+            continue
+
+        mask = np.isfinite(curve_arr)
+        m = months_arr[mask]
+        y = curve_arr[mask]
+        if m.size < 2:
+            continue
+
+        idx_cross = None
+        for j in range(1, y.size):
+            y_prev = y[j - 1]
+            y_curr = y[j]
+            if not (np.isfinite(y_prev) and np.isfinite(y_curr)):
+                continue
+            if (y_prev - 0.5) * (y_curr - 0.5) <= 0:
+                idx_cross = j
+                break
+
+        if idx_cross is None:
+            continue
+
+        m1, m2 = m[idx_cross - 1], m[idx_cross]
+        y1, y2 = y[idx_cross - 1], y[idx_cross]
+        if not (np.isfinite(y1) and np.isfinite(y2)) or m2 == m1:
+            continue
+
+        if y2 == y1:
+            aoa_month = m2
+        else:
+            aoa_month = m1 + (0.5 - y1) * (m2 - m1) / (y2 - y1)
+
+        if np.isfinite(aoa_month) and aoa_month > 0:
+            child_interp_aoa[w] = float(aoa_month)
+
+    return child_interp_aoa
+
+
+def normalize_x_aligned(xs, align_idx, child_aoa_x):
+    xs = np.array(xs, dtype=float)
+    if xs.size == 0 or align_idx >= len(xs) or align_idx < 0:
+        return normalize_x(xs)
+    
+    x_align = xs[align_idx]
+    x_start = xs[0]
+    x_end = xs[-1]
+    xs_norm = (xs - x_start) / (x_end - x_start)
+    align_norm = (x_align - x_start) / (x_end - x_start)
+
+    if align_norm == 0 or not np.isfinite(child_aoa_x) or child_aoa_x == 0:
+        return xs_norm
+
+    xs_aligned = xs_norm * (child_aoa_x / align_norm)
+    
+    return xs_aligned
+
+
+def compute_threshold_crossing_idx(s, baseline_bits):
+    s = np.array(s, dtype=float)
+    if not np.isfinite(s).any():
+        return None
+    s_min = float(np.nanmin(s))
+    thr = 0.5 * (baseline_bits + s_min)
+    
+    for j, v in enumerate(s):
+        if np.isfinite(v) and v <= thr:
+            return j
+    return len(s) - 1
+
+
 def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
     s = np.array(s, dtype=float)
     if not np.isfinite(s).any():
-        return None, None, None
+        return None, None, None, None
     s_min = float(np.nanmin(s))
     thr = 0.5 * (baseline_bits + s_min)
     idx_cross = None
@@ -298,7 +364,7 @@ def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
     end_idx = min(idx_cross + margin_idx, len(s) - 1)
     s_crop = s[: end_idx + 1]
     steps_crop = steps_arr[: end_idx + 1]
-    return s_crop, steps_crop, thr
+    return s_crop, steps_crop, thr, idx_cross
 
 
 def main():
@@ -316,71 +382,18 @@ def main():
 
     word_aoa = load_wordbank_aoa(args.wordbank_csv)
     months, word_to_curve = load_wordbank_curves(args.wordbank_csv)
+    child_interp_aoa = compute_child_interp_aoa(args.wordbank_csv)
 
-    steps_small, small_surpr, small_act = load_results_dir(args.small_dir)
-    steps_medium, medium_surpr, medium_act = load_results_dir(args.medium_dir)
+    steps_small, small_surpr, _ = load_results_dir(args.small_dir)
+    steps_medium, medium_surpr, _ = load_results_dir(args.medium_dir)
 
     words_small = set(small_surpr.keys())
     words_medium = set(medium_surpr.keys())
     available_words = words_small & words_medium
 
     simple_ranking = get_simple_ranking(word_aoa, available_words, args.max_simple)
-    ks = [int(x) for x in args.ks.split(",") if x.strip()]
 
-    # Surprisal for top-k simple words over timesteps
-    for k in ks:
-        words_k = simple_ranking[:k]
-        avg_small = compute_avg_series(small_surpr, words_k)
-        avg_medium = compute_avg_series(medium_surpr, words_k)
-
-        def thr_mean(d: Dict[str, float]) -> float:
-            if not d:
-                return math.nan
-            vals = np.array(list(d.values()), dtype=float)
-            return float(np.mean(vals))
-
-        thr_small_dict = compute_thresholds_per_word(small_surpr, args.baseline_bits, words_k, steps_small)
-        thr_medium_dict = compute_thresholds_per_word(medium_surpr, args.baseline_bits, words_k, steps_medium)
-
-        small_mean = thr_mean(thr_small_dict)
-        med_mean = thr_mean(thr_medium_dict)
-
-        fig = plt.figure()
-        plt.plot(steps_small, avg_small, label="gpt2-small")
-        plt.plot(steps_medium, avg_medium, label="gpt2-medium")
-        if not math.isnan(small_mean):
-            plt.axvline(small_mean, linestyle="--", linewidth=1, color="cornflowerblue", label="AoA small (mean step)")
-        if not math.isnan(med_mean):
-            plt.axvline(med_mean, linestyle="--", linewidth=1, color="orange", label="AoA medium (mean step)")
-        plt.xlabel("Step")
-        plt.ylabel("Average surprisal (bits)")
-        plt.title(f"Top {k} simple words: surprisal vs step")
-        plt.legend()
-        out_path = os.path.join(args.out_dir, f"avg_surprisal_top{k}.png")
-        fig.savefig(out_path, bbox_inches="tight")
-        plt.close(fig)
-
-    # Mean layer attention for top-k simple words over timesteps
-    for k in ks:
-        words_k = simple_ranking[:k]
-        avg_small_act = compute_avg_series(small_act, words_k)
-        avg_medium_act = compute_avg_series(medium_act, words_k)
-
-        fig = plt.figure()
-        plt.plot(steps_small, avg_small_act, label="gpt2-small")
-        plt.plot(steps_medium, avg_medium_act, label="gpt2-medium")
-        plt.xlabel("Step")
-        plt.ylabel("Mean layer attention")
-        plt.title(f"Top {k} simple words: attention vs Step")
-        plt.legend()
-        out_path = os.path.join(args.out_dir, f"avg_attention_top{k}.png")
-        fig.savefig(out_path, bbox_inches="tight")
-        plt.close(fig)
-
-    # Child trajectories vs LLM surprisal (per word)
     if simple_ranking:
-        max_words_side_by_side = 10
-        n_plotted = 0
         margin_idx = 3
         months_arr = np.array(months, dtype=float)
         if months_arr.size > 1:
@@ -388,7 +401,7 @@ def main():
         else:
             months_norm = np.zeros_like(months_arr)
 
-        for w in simple_ranking:
+        for w in simple_ranking[150:]:
             if w not in word_to_curve:
                 continue
             child_curve = word_to_curve[w]
@@ -402,10 +415,10 @@ def main():
             steps_small_arr = np.array(steps_small, dtype=float)
             steps_medium_arr = np.array(steps_medium, dtype=float)
 
-            s_small_crop, steps_small_crop, thr_small = crop_with_threshold(
+            s_small_crop, steps_small_crop, thr_small, idx_cross_small = crop_with_threshold(
                 s_small, steps_small_arr, args.baseline_bits, margin_idx
             )
-            s_medium_crop, steps_medium_crop, thr_medium = crop_with_threshold(
+            s_medium_crop, steps_medium_crop, thr_medium, idx_cross_medium = crop_with_threshold(
                 s_medium, steps_medium_arr, args.baseline_bits, margin_idx
             )
 
@@ -439,36 +452,79 @@ def main():
             ax3 = axes[2]
             ax3b = ax3.twinx()
 
-            if s_small_crop is not None and len(s_small_crop) > 0:
-                x_small_norm = normalize_x(steps_small_crop)
-                ax3.plot(x_small_norm, s_small_crop, label="gpt2-small")
-            if s_medium_crop is not None and len(s_medium_crop) > 0:
-                x_medium_norm = normalize_x(steps_medium_crop)
-                ax3.plot(x_medium_norm, s_medium_crop, label="gpt2-medium")
+            # Align AoA
+            child_aoa_x = None
+            if w in child_interp_aoa:
+                child_aoa_month = child_interp_aoa[w]
+                if months_arr.size > 1:
+                    child_aoa_x = (child_aoa_month - months_arr.min()) / (months_arr.max() - months_arr.min())
+                    child_aoa_x = np.clip(child_aoa_x, 0.0, 1.0)
+            else:
+                child_mask = np.isfinite(child_curve)
+                if child_mask.any():
+                    first_valid_val = child_curve[child_mask][0]
+                    if first_valid_val >= 0.5:
+                        child_aoa_x = 0.0
+                    else:
+                        plt.close(fig)
+                        continue
+
+            if child_aoa_x is None:
+                plt.close(fig)
+                continue
 
             child_mask = np.isfinite(child_curve)
             if child_mask.any():
                 ax3b.plot(months_norm[child_mask], child_curve[child_mask], marker="o", color="green", label="children")
 
-            all_s_vals = []
-            for arr in (s_small_crop, s_medium_crop):
-                if arr is not None:
-                    arr = np.asarray(arr, dtype=float)
-                    arr = arr[np.isfinite(arr)]
-                    if arr.size > 0:
-                        all_s_vals.extend(arr.tolist())
+            # # Align AoA threshold
+            # all_s_vals = []
+            # for arr in (s_small, s_medium):
+            #     if arr is not None:
+            #         arr = np.asarray(arr, dtype=float)
+            #         arr = arr[np.isfinite(arr)]
+            #         if arr.size > 0:
+            #             all_s_vals.extend(arr.tolist())
 
-            if all_s_vals:
-                min_surprisal = float(min(all_s_vals))
-                max_surprisal = float(max(all_s_vals))
-                data_range = max_surprisal - min_surprisal
-                if data_range <= 0:
-                    data_range = 1.0
-                buffer = 0.1 * data_range
-                half_total = 0.5 * data_range + buffer
-                y_max = thr_small + half_total
-                y_min = thr_small - half_total
-                ax3.set_ylim(y_max, y_min)
+            # if all_s_vals:
+            #     min_surprisal = float(min(all_s_vals))
+            #     max_surprisal = float(max(all_s_vals))
+            #     data_range = max_surprisal - min_surprisal
+            #     if data_range <= 0:
+            #         data_range = 1.0
+            #     buffer = 0.1 * data_range
+            #     half_total = 0.5 * data_range + buffer
+            #     y_max = thr_small + half_total
+            #     y_min = thr_small - half_total
+            #     ax3.set_ylim(y_max, y_min)
+
+            # Normalize surprisal curves so threshold is at 0.5
+            if thr_small is not None and np.isfinite(s_small).any():
+                s_small_min = np.nanmin(s_small)
+                s_small_range = np.nanmax(s_small) - s_small_min
+                if s_small_range > 0:
+                    s_small_norm = (s_small - thr_small) / s_small_range + 0.5
+                else:
+                    s_small_norm = np.full_like(s_small, 0.5)
+            else:
+                s_small_norm = None
+
+            if thr_medium is not None and np.isfinite(s_medium).any():
+                s_medium_min = np.nanmin(s_medium)
+                s_medium_range = np.nanmax(s_medium) - s_medium_min
+                if s_medium_range > 0:
+                    s_medium_norm = (s_medium - thr_medium) / s_medium_range + 0.5
+                else:
+                    s_medium_norm = np.full_like(s_medium, 0.5)
+            else:
+                s_medium_norm = None
+
+            # Plot normalized surprisal
+            x_small_norm = normalize_x_aligned(steps_small_arr, idx_cross_small, child_aoa_x)
+            ax3.plot(x_small_norm, s_small_norm, label="gpt2-small")
+            x_medium_norm = normalize_x_aligned(steps_medium_arr, idx_cross_medium, child_aoa_x)
+            ax3.plot(x_medium_norm, s_medium_norm, label="gpt2-medium")
+            ax3.set_ylim(1.0, 0.0)
 
             ax3.set_xlim(0.0, 1.0)
             ax3.set_xlabel("Normalized timeline")
@@ -487,90 +543,75 @@ def main():
             out_path_word = os.path.join(args.out_dir, f"word_{safe_w}_child_vs_llm_surprisal.png")
             fig.savefig(out_path_word, bbox_inches="tight")
             plt.close(fig)
-            n_plotted += 1
-            if n_plotted >= max_words_side_by_side:
-                break
 
-    # Child trajectories vs LLM attention (per word)
-    if simple_ranking:
-        max_words_side_by_side_att = 10
-        n_plotted_att = 0
 
-        months_arr = np.array(months, dtype=float)
-        if months_arr.size > 1:
-            months_norm = (months_arr - months_arr.min()) / (months_arr.max() - months_arr.min())
-        else:
-            months_norm = np.zeros_like(months_arr)
+            # MSE
+            mse_results = []
+                
+            # Create interpolation functions and evaluate at 100 points
+            x_eval = np.linspace(0, 1, 100)
+            
+            # Interpolate small model
+            if s_small_norm is not None:
+                x_small_norm_interp = normalize_x_aligned(steps_small_arr, idx_cross_small, child_aoa_x)
+                mask_small = np.isfinite(s_small_norm) & np.isfinite(x_small_norm_interp)
+                if mask_small.sum() >= 2:
+                    s_small_interp = np.interp(x_eval, x_small_norm_interp[mask_small], s_small_norm[mask_small])
+                else:
+                    s_small_interp = None
+            else:
+                s_small_interp = None
+            
+            # Interpolate medium model
+            if s_medium_norm is not None:
+                x_medium_norm_interp = normalize_x_aligned(steps_medium_arr, idx_cross_medium, child_aoa_x)
+                mask_medium = np.isfinite(s_medium_norm) & np.isfinite(x_medium_norm_interp)
+                if mask_medium.sum() >= 2:
+                    s_medium_interp = np.interp(x_eval, x_medium_norm_interp[mask_medium], s_medium_norm[mask_medium])
+                else:
+                    s_medium_interp = None
+            else:
+                s_medium_interp = None
+            
+            # Interpolate child curve
+            if child_mask.sum() >= 2:
+                child_interp = np.interp(x_eval, months_norm[child_mask], child_curve[child_mask])
+            else:
+                child_interp = None
+            
+            # Calculate MSEs
+            mse_small_child = None
+            mse_medium_child = None
+            mse_small_medium = None
+            
+            if s_small_interp is not None and child_interp is not None:
+                mse_small_child = np.mean((s_small_interp - child_interp) ** 2)
+            
+            if s_medium_interp is not None and child_interp is not None:
+                mse_medium_child = np.mean((s_medium_interp - child_interp) ** 2)
+            
+            if s_small_interp is not None and s_medium_interp is not None:
+                mse_small_medium = np.mean((s_small_interp - s_medium_interp) ** 2)
+            
+            mse_results.append({
+                'word': w,
+                'mse_small_child': mse_small_child,
+                'mse_medium_child': mse_medium_child,
+                'mse_small_medium': mse_small_medium
+            })
 
-        for w in simple_ranking:
-            if w not in word_to_curve:
-                continue
-            child_curve = word_to_curve[w]
-            if not np.isfinite(child_curve).any():
-                continue
-            a_small = np.array(small_act[w], dtype=float)
-            a_medium = np.array(medium_act[w], dtype=float)
-            if not (np.isfinite(a_small).any() or np.isfinite(a_medium).any()):
-                continue
+            # Save MSE csv
+            if mse_results:
+                mse_df = pd.DataFrame(mse_results)
+                mse_csv_path = os.path.join(args.out_dir, "mse_results.csv")
+                if os.path.exists(mse_csv_path):
+                    existing_df = pd.read_csv(mse_csv_path)
 
-            steps_small_arr = np.array(steps_small, dtype=float)
-            steps_medium_arr = np.array(steps_medium, dtype=float)
-
-            fig, axes = plt.subplots(1, 3, figsize=(12, 3))
-
-            if np.isfinite(a_small).any():
-                axes[0].plot(steps_small_arr, a_small, label="gpt2-small")
-            if np.isfinite(a_medium).any():
-                axes[0].plot(steps_medium_arr, a_medium, label="gpt2-medium")
-
-            axes[0].set_xlabel("Step")
-            axes[0].set_ylabel("Mean layer attention")
-            axes[0].set_title(f"{w} - LLM attention")
-            axes[0].invert_yaxis()
-            axes[0].legend()
-
-            axes[1].plot(months, child_curve, marker="o")
-            axes[1].axhline(0.5, linestyle="--", linewidth=1, color="cornflowerblue")
-            axes[1].set_xlabel("Age (months)")
-            axes[1].set_ylabel("Proportion producing")
-            axes[1].set_ylim(0.0, 1.0)
-            axes[1].set_title(f"{w} - Children")
-
-            ax3 = axes[2]
-            ax3b = ax3.twinx()
-
-            if np.isfinite(a_small).any():
-                x_small_norm = normalize_x(steps_small_arr)
-                ax3.plot(x_small_norm, a_small, label="gpt2-small")
-            if np.isfinite(a_medium).any():
-                x_medium_norm = normalize_x(steps_medium_arr)
-                ax3.plot(x_medium_norm, a_medium, label="gpt2-medium")
-
-            child_mask = np.isfinite(child_curve)
-            if child_mask.any():
-                ax3b.plot(months_norm[child_mask], child_curve[child_mask], marker="o", color="green", label="children")
-
-            ax3.set_xlim(0.0, 1.0)
-            ax3.set_xlabel("Normalized timeline")
-            ax3.set_ylabel("Mean layer attention")
-            ax3b.set_ylabel("Proportion producing")
-            ax3b.set_ylim(0.0, 1.0)
-            ax3.set_title(f"{w} - Normalized aligned overlay")
-            ax3.invert_yaxis()
-
-            handles1, labels1 = ax3.get_legend_handles_labels()
-            handles2, labels2 = ax3b.get_legend_handles_labels()
-            if handles1 or handles2:
-                ax3.legend(handles1 + handles2, labels1 + labels2, loc="best")
-
-            fig.tight_layout()
-            safe_w = re.sub(r"[^A-Za-z0-9]+", "_", w).strip("_")
-            out_path_word_att = os.path.join(args.out_dir, f"word_{safe_w}_child_vs_llm_attention.png")
-            fig.savefig(out_path_word_att, bbox_inches="tight")
-            plt.close(fig)
-            n_plotted_att += 1
-            if n_plotted_att >= max_words_side_by_side_att:
-                break
+                    if not existing_df.empty and not mse_df.empty:
+                        mse_df = pd.concat([existing_df, mse_df], ignore_index=True)
+                    elif not existing_df.empty:
+                        mse_df = existing_df
+                mse_df.to_csv(mse_csv_path, index=False)
 
 
 if __name__ == "__main__":

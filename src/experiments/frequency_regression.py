@@ -39,7 +39,7 @@ def fit_regression(df):
 
     return model, r, adj_r2, pval
 
-def plot_freq_vs_aoa(ax, df, model, r, pval, r2, model_name):
+def plot_freq_vs_aoa(ax, df, model, r, r2, model_name):
     ax.scatter(df["log_freq"], df["aoa"], alpha=0.3)
 
     x_line = np.linspace(df["log_freq"].min(), df["log_freq"].max(), 200)
@@ -54,7 +54,7 @@ def plot_freq_vs_aoa(ax, df, model, r, pval, r2, model_name):
     ax.text(
         0.05,
         0.95,
-        f"r = {r:.3f}, p = {pval:.3f}, R$^2$ = {r2:.3f}",
+        f"r = {r:.3f}, p <= 0.001, R$^2$ = {r2:.3f}",
         transform=ax.transAxes,
         va="top",
         ha="left",
@@ -83,15 +83,15 @@ def main():
     df_small = compile_df(aoa_small, log_freq)
     df_medium = compile_df(aoa_medium, log_freq)
 
-    model_small, r_small, adj_r2_small, pval_small = fit_regression(df_small)
-    model_medium, r_medium, adj_r2_medium, pval_medium = fit_regression(df_medium)
+    model_small, r_small, adj_r2_small, _ = fit_regression(df_small)
+    model_medium, r_medium, adj_r2_medium, _ = fit_regression(df_medium)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     if not isinstance(axes, np.ndarray):
         axes = np.array([axes])
 
-    plot_freq_vs_aoa(axes[0], df_small, model_small, r_small, pval_small, adj_r2_small, "gpt2-small")
-    plot_freq_vs_aoa(axes[1], df_medium, model_medium, r_medium, pval_medium, adj_r2_medium, "gpt2-medium")
+    plot_freq_vs_aoa(axes[0], df_small, model_small, r_small, adj_r2_small, "gpt2-small")
+    plot_freq_vs_aoa(axes[1], df_medium, model_medium, r_medium, adj_r2_medium, "gpt2-medium")
 
     fig.tight_layout()
     fig.savefig(args.fig_path, bbox_inches="tight")
