@@ -1,51 +1,8 @@
 import argparse
 import numpy as np
 import pandas as pd
-from scipy.optimize import curve_fit
 from scipy.stats import pearsonr, spearmanr
-from plot import *
-
-def fit_logistic_normalized(x_raw: np.ndarray, y_raw: np.ndarray):
-    x_raw = np.asarray(x_raw, dtype=float)
-    y_raw = np.asarray(y_raw, dtype=float)
-    mask = np.isfinite(x_raw) & np.isfinite(y_raw)
-    x_raw = x_raw[mask]
-    y_raw = y_raw[mask]
-    if x_raw.size < 4:
-        return None
-    x = normalize_x(x_raw)
-    y_min = float(np.min(y_raw))
-    y_max = float(np.max(y_raw))
-    if not (np.isfinite(y_min) and np.isfinite(y_max)) or y_max <= y_min:
-        return None
-    L0 = y_max - y_min
-    b0 = y_min
-    x0_0 = 0.5
-    if x.size > 1:
-        corr = np.corrcoef(x, y_raw)[0, 1]
-    else:
-        corr = 0.0
-    k0 = 1.0 if corr < 0 else -1.0
-    p0 = [L0, k0, x0_0, b0]
-    try:
-        popt, _ = curve_fit(logistic4, x, y_raw, p0=p0, maxfev=10000)
-    except Exception:
-        return None
-    return popt
-
-
-def zscore(vec: np.ndarray):
-    v = np.asarray(vec, dtype=float)
-    mask = np.isfinite(v)
-    if np.sum(mask) < 2:
-        return v
-    m = np.mean(v[mask])
-    s = np.std(v[mask])
-    if s > 0:
-        v[mask] = (v[mask] - m) / s
-    else:
-        v[mask] = 0.0
-    return v
+from utils import *
 
 
 def main():

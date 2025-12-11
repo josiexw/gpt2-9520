@@ -2,8 +2,7 @@ import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import pearsonr
-from plot import *
+from utils import *
 
 plt.rcParams.update(
     {
@@ -21,7 +20,7 @@ def main():
     parser.add_argument("--small_dir", type=str, default="stanford-gpt2-small-a_results")
     parser.add_argument("--medium_dir", type=str, default="stanford-gpt2-medium-a_results")
     parser.add_argument("--wordbank_csv", type=str, default="data/wordbank_item_data.csv")
-    parser.add_argument("--out_dir", type=str, default="figs")
+    parser.add_argument("--out_dir", type=str, default="figs_paper")
     parser.add_argument("--max_simple", type=int, default=600)
     parser.add_argument("--baseline_bits", type=float, default=15.6)
     args = parser.parse_args()
@@ -29,14 +28,13 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     word_aoa = load_wordbank_aoa(args.wordbank_csv)
-
     steps_small, small_surpr, _ = load_results_dir(args.small_dir)
     steps_medium, medium_surpr, _ = load_results_dir(args.medium_dir)
 
     words_small = set(small_surpr.keys())
     words_medium = set(medium_surpr.keys())
-
     available_words = words_small & words_medium
+
     simple_ranking = get_simple_ranking(word_aoa, available_words, args.max_simple)
     child_interp_aoa = compute_child_interp_aoa(args.wordbank_csv)
     words_for_aoa = [w for w in simple_ranking if w in child_interp_aoa]
@@ -54,18 +52,16 @@ def main():
         words=words_for_aoa,
     )
 
-    plot_specs = [
-        ("gpt2-small", aoa_small_log, "small"),
-        ("gpt2-medium", aoa_medium_log, "medium"),
-    ]
-
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(2, 1, figsize=(8, 10))
     if not isinstance(axes, np.ndarray):
         axes = np.array([axes])
 
-    plotted = 0
+    plot_specs = [
+        ("gpt2-small", aoa_small_log, axes[0]),
+        ("gpt2-medium", aoa_medium_log, axes[1]),
+    ]
 
-    for ax, (model_name, aoa_log_dict, suffix) in zip(axes, plot_specs):
+    for model_name, aoa_log_dict, ax in plot_specs:
         x_vals = []
         y_vals = []
         for w in words_for_aoa:
@@ -81,18 +77,13 @@ def main():
             continue
         x_arr = np.array(x_vals, dtype=float)
         y_arr = np.array(y_vals, dtype=float)
-        if x_arr.size < 2:
-            continue
-        r, pval = pearsonr(x_arr, y_arr)
-        r2 = r**2
-        n = len(x_vals)
-        p = 1
-        adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
         
-        coeffs = np.polyfit(x_arr, y_arr, 1)
-        x_line = np.linspace(x_arr.min(), x_arr.max(), 100)
-        y_line = coeffs[0] * x_line + coeffs[1]
+        model, r, pval = fit_regression_xy(x_arr, y_arr)
+        if model is None:
+            continue
 
+        x_line = np.linspace(x_arr.min(), x_arr.max(), 100)
+        y_line = model.predict(x_line.reshape(-1, 1))
         ax.scatter(x_arr, y_arr, alpha=0.3)
         ax.plot(x_line, y_line)
         ax.set_xlabel("Child AoA (months)")
@@ -102,21 +93,16 @@ def main():
         ax.text(
             0.05,
             0.95,
-            f"r = {r:.3f}, p = {pval:.3f}, R$^2$ = {adj_r2:.3f}",
+            f"r = {r:.3f}, p = {pval:.3f}, R^2 = {r**2:.3f}",
             transform=ax.transAxes,
             va="top",
             ha="left",
             fontsize=16
         )
-        plotted += 1
-
-    if plotted == 0:
-        plt.close(fig)
-        return
 
     fig.tight_layout()
     out_path_aoa = os.path.join(args.out_dir, "child_vs_llm_aoa_small_medium.png")
-    fig.savefig(out_path_aoa, bbox_inches="tight")
+    fig.savefig(out_path_aoa, bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 
