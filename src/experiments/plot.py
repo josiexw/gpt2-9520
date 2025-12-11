@@ -37,19 +37,6 @@ def normalize_x_aligned(xs, align_idx, child_aoa_x):
     return xs_aligned
 
 
-def compute_threshold_crossing_idx(s, baseline_bits):
-    s = np.array(s, dtype=float)
-    if not np.isfinite(s).any():
-        return None
-    s_min = float(np.nanmin(s))
-    thr = 0.5 * (baseline_bits + s_min)
-    
-    for j, v in enumerate(s):
-        if np.isfinite(v) and v <= thr:
-            return j
-    return len(s) - 1
-
-
 def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
     s = np.array(s, dtype=float)
     if not np.isfinite(s).any():
@@ -63,7 +50,7 @@ def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
         v_curr = s[j]
         if np.isfinite(v_prev) and np.isfinite(v_curr):
             if (v_prev - thr) * (v_curr - thr) <= 0:
-                # Linear interpolation to find exact crossing point
+                # Linear interpolation to find exact crossing point TODO: change to logistic
                 if v_curr != v_prev:
                     frac = (thr - v_prev) / (v_curr - v_prev)
                     idx_cross = (j - 1) + frac
@@ -74,7 +61,7 @@ def crop_with_threshold(s, steps_arr, baseline_bits, margin_idx):
     if idx_cross is None:
         idx_cross = float(len(s) - 1)
     
-    # For cropping, use integer index
+    # Use integer index for cropping
     idx_cross_int = int(np.ceil(idx_cross))
     end_idx = min(idx_cross_int + margin_idx, len(s) - 1)
     s_crop = s[: end_idx + 1]
@@ -90,7 +77,6 @@ def main():
     parser.add_argument("--wordbank_csv", type=str, default="data/wordbank_item_data.csv")
     parser.add_argument("--out_dir", type=str, default="figs")
     parser.add_argument("--max_simple", type=int, default=500)
-    parser.add_argument("--ks", type=str, default="10,100,500")
     parser.add_argument("--baseline_bits", type=float, default=15.6)
     args = parser.parse_args()
 
@@ -288,18 +274,11 @@ def main():
             'mse_small_medium': mse_small_medium
         })
 
-        # Save MSE csv
-        if mse_results:
-            mse_df = pd.DataFrame(mse_results)
-            mse_csv_path = os.path.join("figs_paper", "mse_results.csv")
-            if os.path.exists(mse_csv_path):
-                existing_df = pd.read_csv(mse_csv_path)
-
-                if not existing_df.empty and not mse_df.empty:
-                    mse_df = pd.concat([existing_df, mse_df], ignore_index=True)
-                elif not existing_df.empty:
-                    mse_df = existing_df
-            mse_df.to_csv(mse_csv_path, index=False)
+    # Save MSE csv
+    if mse_results:
+        mse_df = pd.DataFrame(mse_results)
+        mse_csv_path = os.path.join("figs_paper", "mse_results.csv")
+        mse_df.to_csv(mse_csv_path, index=False)
 
 
     # Merged fig for paper
