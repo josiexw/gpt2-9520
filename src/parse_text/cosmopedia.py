@@ -2,7 +2,7 @@ import argparse
 import pickle
 import re
 from collections import defaultdict
-from typing import List, Dict
+from typing import List
 import csv
 import spacy
 from datasets import load_dataset
@@ -109,7 +109,7 @@ def collect_contexts_from_texts(
                     if len(contexts[w]) >= max_context:
                         completed_words.add(w)
                         
-                if len(completed_words) == len(simple_words):
+            if len(completed_words) >= len(simple_words):
                     break
 
     return {w: list(contexts[w]) for w in simple_words if len(contexts[w]) >= max_context}
